@@ -29,8 +29,6 @@ momentum = 0.5
 batch_size = 16
 prefer_gpu = True
 
-accuracy_threshold = 0.99
-
 input_dim = 28 ** 2 # MNIST input size
 hidden_1_dim = 32
 hidden_2_dim = 32
@@ -62,13 +60,12 @@ test_loader = torch.utils.data.DataLoader(
                                torchvision.transforms.Normalize((0.1307,), (0.3081,))
                                ])), batch_size=batch_size, shuffle=True)
 
-
 # Must normalize the data for Keras---not required for PyTorch
 X_train = train_loader.dataset.data.view(-1, input_dim).numpy() / 255.
 y_train = train_loader.dataset.targets.numpy()
 
-X_test = test_loader.dataset.data.view(-1, input_dim) / 255.
-y_test = test_loader.dataset.targets
+X_test = test_loader.dataset.data.view(-1, input_dim).numpy() / 255.
+y_test = test_loader.dataset.targets.numpy()
 
 
 def create_mlp():
@@ -83,7 +80,7 @@ def create_mlp():
     model.add(Activation('softmax'))
     model.compile(loss='sparse_categorical_crossentropy', 
                   optimizer=SGD(learning_rate=learning_rate, momentum=momentum), 
-                  metrics=['accuracy'])
+                  metrics=['accuracy', 'sparse_categorical_crossentropy'])
     
     alpha = 1. / np.sqrt(hidden_1_dim)
     model.layers[0].weights[0] = np.random.uniform(low=-alpha, high=alpha, size=hidden_1_dim)
@@ -98,7 +95,7 @@ def create_mlp():
     return model
 
 # simple early stopping
-es = EarlyStopping(monitor='val_loss', mode='min', verbose=1)
+es = EarlyStopping(monitor='accuracy', mode='auto', verbose=1, min_delta=0.001, patience=2)
 
 model = KerasClassifier(build_fn=create_mlp, verbose=1, callbacks=es,
                          epochs=n_epochs, batch_size=batch_size)
@@ -131,3 +128,14 @@ plt.grid(True)
 plt.tight_layout()
 plt.show()
 plt.close(fig)
+
+# Testing
+with tf.device(device):
+    y_pred = model.predict(X_test)
+    loss, acc, _ = model.model.evaluate(X_test, y_test)
+    
+print('Test: Loss {:.4f}, Acc: {:.4f}'.format(loss, acc))
+
+# Reporting the number of parameters
+num_params = model.model.count_params()
+print('Number of parameters: {}'.format(num_params))
