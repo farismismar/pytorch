@@ -80,8 +80,8 @@ def create_mlp():
     
     return model
 
-# simple early stopping
-es = EarlyStopping(monitor='accuracy', mode='auto', verbose=1, min_delta=0.001, patience=2)
+# Early stopping condition
+es = EarlyStopping(monitor='accuracy', mode='auto', verbose=1, min_delta=0.0001, patience=4)
 
 model = KerasClassifier(build_fn=create_mlp, verbose=1, callbacks=es,
                          epochs=n_epochs, batch_size=batch_size)
