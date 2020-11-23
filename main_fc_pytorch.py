@@ -8,7 +8,6 @@ Created on Sun Nov 22 08:56:31 2020
 import os
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torchvision
 
 import numpy as np
@@ -78,6 +77,7 @@ nn.init.uniform_(model[4].bias, a=-alpha, b=alpha)
 
 # GD with adaptive moments
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
+criterion = nn.CrossEntropyLoss()
 
 # Training
 history = {'epoch': [], 'loss': [], 'accuracy': []}
@@ -87,13 +87,14 @@ for epoch in np.arange(n_epochs):
     model.train()
     epoch_loss = 0
     correct_train = total_train = 0 
+    # Iterate on batches
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         data = data.view(data.shape[0], -1) # reshape
 
         optimizer.zero_grad() # minimize
-        output = model(data)
-        loss = F.cross_entropy(output, target)
+        output = model.forward(data)
+        loss = criterion(output, target)
         loss.backward() # backward propagation
         optimizer.step() # update optimizer
         
@@ -155,8 +156,8 @@ with torch.no_grad():
     for batch_idx, (data, target) in enumerate(test_loader):
         data, target = data.to(device), target.to(device)
         data = data.view(data.shape[0], -1)
-        output = model(data)
-        loss = F.cross_entropy(output, target)
+        output = model.forward(data)
+        loss = criterion(output, target)
         test_loss += batch_size * loss.item()
         
         # accuracy
