@@ -72,9 +72,9 @@ def create_mlp():
     global seed, hidden_1_dim, hidden_2_dim
   
     model = Sequential()
-    model.add(Dense(units=hidden_1_dim, use_bias=True, input_dim=input_dim))
+    model.add(Dense(units=hidden_1_dim, input_dim=input_dim, use_bias=True))
     model.add(Activation('relu'))
-    model.add(Dense(units=hidden_2_dim, use_bias=True))
+    model.add(Dense(units=hidden_2_dim, input_dim=hidden_1_dim, use_bias=True))
     model.add(Activation('relu'))
     model.add(Dense(units=output_dim, input_dim=hidden_2_dim))
     model.add(Activation('softmax'))

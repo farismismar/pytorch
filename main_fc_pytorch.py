@@ -87,7 +87,7 @@ for epoch in np.arange(n_epochs):
     model.train()
     epoch_loss = 0
     correct_train = total_train = 0 
-    # Iterate on batches
+    # Iterate on batches to introduce Stochastic GD
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         data = data.view(data.shape[0], -1) # reshape
