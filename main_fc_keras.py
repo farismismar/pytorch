@@ -7,16 +7,14 @@ Created on Sun Nov 22 17:36:34 2020
 """
 
 import os
+import tensorflow as tf
+import keras
 from keras.models import Sequential
 from keras.layers import Dense, Activation
 from keras.optimizers import SGD
 from keras.callbacks import EarlyStopping
 from keras.wrappers.scikit_learn import KerasClassifier
-import tensorflow as tf
 from tensorflow.compat.v1 import set_random_seed
-
-import torch
-import torchvision
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -26,7 +24,7 @@ import time
 n_epochs = 100
 learning_rate = 0.01
 momentum = 0.5
-batch_size = 16
+batch_size = 4
 prefer_gpu = True
 
 input_dim = 28 ** 2 # MNIST input size
@@ -38,34 +36,22 @@ os.chdir('/Users/farismismar/Desktop')
 
 use_cuda = len(tf.config.list_physical_devices('GPU')) > 0 and prefer_gpu
 device = "/gpu:0" if use_cuda else "/cpu:0"
-torch.backends.cudnn.enabled = use_cuda
 
 # Fix the seed to guarantee reproducibility
 seed = 0
 set_random_seed(seed)
 np.random.seed(seed)
 
-# Load MNIST using Torchvision
-train_loader = torch.utils.data.DataLoader(
-    torchvision.datasets.MNIST('./files/', train=True, download=True, 
-                               transform=torchvision.transforms.Compose([
-                               torchvision.transforms.ToTensor(), 
-                               torchvision.transforms.Normalize((0.1307,), (0.3081,))
-                               ])), batch_size=batch_size, shuffle=True)
+# Load MNIST as Numpy arrays
+(X_train, y_train), (X_test, y_test) = keras.datasets.mnist.load_data()
+# Note: If this fails due to certificate verify failure, sudo -H pip3 install --upgrade certifi
 
-test_loader = torch.utils.data.DataLoader(
-    torchvision.datasets.MNIST('./files/', train=False, download=True, 
-                               transform=torchvision.transforms.Compose([
-                               torchvision.transforms.ToTensor(), 
-                               torchvision.transforms.Normalize((0.1307,), (0.3081,))
-                               ])), batch_size=batch_size, shuffle=True)
+# Must normalize the data for Keras in [0,1]---not required for PyTorch
+X_train = X_train.astype("float32") / 255.
+X_test = X_test.astype("float32") / 255.
 
-# Must normalize the data for Keras---not required for PyTorch
-X_train = train_loader.dataset.data.view(-1, input_dim).numpy() / 255.
-y_train = train_loader.dataset.targets.numpy()
-
-X_test = test_loader.dataset.data.view(-1, input_dim).numpy() / 255.
-y_test = test_loader.dataset.targets.numpy()
+X_train = X_train.reshape(X_train.shape[0], -1) # reshape
+X_test = X_test.reshape(X_test.shape[0], -1) # reshape
 
 
 def create_mlp():
