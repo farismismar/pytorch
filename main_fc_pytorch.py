@@ -18,7 +18,7 @@ import time
 n_epochs = 100
 learning_rate = 0.01
 momentum = 0.5
-batch_size = 16
+batch_size = 4
 prefer_gpu = True
 
 accuracy_threshold = 0.99
