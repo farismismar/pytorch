@@ -8,7 +8,7 @@ Created on Sun Nov 22 17:36:34 2020
 
 import os
 from tensorflow import keras
-from tensorflow.keras import layers
+from tensorflow.keras import layers, initializers
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
 from tensorflow.compat.v1 import set_random_seed
@@ -55,12 +55,22 @@ X_test = X_test.reshape(X_test.shape[0], -1) # reshape
 def create_mlp():
     global seed, input_dim, hidden_1_dim, hidden_2_dim, output_dim
     
+    # Uniform initializer for weight and bias
+    alpha = 1. / np.sqrt(hidden_1_dim)
+    initializer_1 = initializers.RandomUniform(minval=-alpha, maxval=alpha, seed=seed)
+    
+    alpha= 1. / np.sqrt(hidden_2_dim)
+    initializer_2 = initializers.RandomUniform(minval=-alpha, maxval=alpha, seed=seed)
+    
+    alpha= 1. / np.sqrt(output_dim)
+    initializer_3 = initializers.RandomUniform(minval=-alpha, maxval=alpha, seed=seed)
+    
     model = keras.Sequential(
         [
             keras.Input(shape=input_dim),
-            layers.Dense(hidden_1_dim, use_bias=True, activation="relu"),
-            layers.Dense(hidden_2_dim, use_bias=True, activation="relu"),
-            layers.Dense(output_dim, use_bias=True, activation="softmax")
+            layers.Dense(hidden_1_dim, use_bias=True, activation="relu", kernel_initializer=initializer_1,  bias_initializer=initializer_1),
+            layers.Dense(hidden_2_dim, use_bias=True, activation="relu", kernel_initializer=initializer_2,  bias_initializer=initializer_2),
+            layers.Dense(output_dim, use_bias=True, activation="softmax", kernel_initializer=initializer_3,  bias_initializer=initializer_3)
             
         ]
     )
@@ -68,16 +78,6 @@ def create_mlp():
     model.compile(loss='sparse_categorical_crossentropy', 
                   optimizer=keras.optimizers.SGD(learning_rate=learning_rate, momentum=momentum), 
                   metrics=['accuracy', 'sparse_categorical_crossentropy'])
-    
-    alpha = 1. / np.sqrt(hidden_1_dim)
-    model.layers[0].weights[0] = np.random.uniform(low=-alpha, high=alpha, size=hidden_1_dim)
-    model.layers[0].weights[1] = np.random.uniform(low=-alpha, high=alpha, size=hidden_1_dim) # bias
-    alpha = 1. / np.sqrt(hidden_2_dim)
-    model.layers[1].weights[0] =  np.random.uniform(low=-alpha, high=alpha, size=hidden_2_dim)
-    model.layers[1].weights[1] = np.random.uniform(low=-alpha, high=alpha, size=hidden_2_dim)  
-    alpha = 1. / np.sqrt(output_dim)
-    model.layers[2].weights[0] = np.random.uniform(low=-alpha, high=alpha, size=output_dim)
-    model.layers[2].weights[1] = np.random.uniform(low=-alpha, high=alpha, size=output_dim)
     
     return model
 
