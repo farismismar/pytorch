@@ -68,9 +68,9 @@ def create_mlp():
     model = keras.Sequential(
         [
             keras.Input(shape=input_dim),
-            layers.Dense(hidden_1_dim, use_bias=True, activation="relu", kernel_initializer=initializer_1,  bias_initializer=initializer_1),
-            layers.Dense(hidden_2_dim, use_bias=True, activation="relu", kernel_initializer=initializer_2,  bias_initializer=initializer_2),
-            layers.Dense(output_dim, use_bias=True, activation="softmax", kernel_initializer=initializer_3,  bias_initializer=initializer_3)
+            layers.Dense(hidden_1_dim, use_bias=True, activation="relu", kernel_initializer=initializer_1, bias_initializer=initializer_1),
+            layers.Dense(hidden_2_dim, use_bias=True, activation="relu", kernel_initializer=initializer_2, bias_initializer=initializer_2),
+            layers.Dense(output_dim, use_bias=True, activation="softmax", kernel_initializer=initializer_3, bias_initializer=initializer_3)
             
         ]
     )

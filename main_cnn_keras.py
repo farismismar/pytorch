@@ -56,6 +56,9 @@ X_test = np.expand_dims(X_test, -1)
 def create_mlp():
     global seed, input_dim, hidden_1_dim, hidden_2_dim, output_dim
     
+    # Convert the tuple into a single number
+    input_dim_1d = np.prod(input_dim)
+    
     # Uniform initializer for weight and bias
     initializer = initializers.RandomUniform(minval=-1, maxval=1, seed=seed)
      
@@ -67,6 +70,11 @@ def create_mlp():
             layers.Conv2D(filter_2_dim, kernel_size=(3, 3), padding='valid', activation="relu", kernel_initializer=initializer,  bias_initializer=initializer),
             layers.MaxPooling2D(pool_size=(2, 2)),
             layers.Flatten(),
+            layers.Dropout(rate=0.2, seed=seed),
+            layers.Dense(input_dim_1d, use_bias=True, activation='relu'),       
+            layers.Dropout(rate=0.2, seed=seed),
+            layers.Dense(input_dim_1d, use_bias=True, activation='relu'),
+            layers.Dropout(rate=0.2, seed=seed),
             layers.Dense(output_dim, use_bias=True, activation="softmax")            
         ]
     )
