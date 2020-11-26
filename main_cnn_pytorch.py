@@ -23,7 +23,7 @@ batch_size = 64
 prefer_gpu = True
 
 input_dim = (28, 28, 1) # MNIST input size
-filter_1_dim = 16
+filter_1_dim = 32
 filter_2_dim = 64
 output_dim = 10
 
@@ -89,7 +89,6 @@ model = torch.nn.Sequential(
 # PyTorch sets weights from a Uniform distribution automatically.
 # model[0].weight
 
-
 # GD with adaptive moments
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
 criterion = nn.CrossEntropyLoss()
@@ -122,7 +121,7 @@ for epoch in np.arange(n_epochs):
         total_train += target.nelement()
         train_accuracy = correct_train / total_train
         
-        if batch_idx % 50 == 0:
+        if batch_idx % 100 == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.2f},\tAcc: {:.4f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item(), train_accuracy))
