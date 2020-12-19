@@ -32,11 +32,11 @@ class DQNLearningAgent:
 
         self.state_size = state_size
         self.action_size = action_size
+        self.random_state = random_state
         
         self.model = self._build_model()
 
         self.memory = deque(maxlen=2000)
-        self.random_state = random_state
         self.batch_size = batch_size
         self.prefer_gpu = True
         
@@ -58,12 +58,24 @@ class DQNLearningAgent:
         
     def _build_model(self):
         # Neural Net for Deep Q learning Model from state_size |S| to action_size |A|
+        # Keep adding depth until the losses start to subside while Q increases.
+        hidden_dim = 8
+        
+        # Ensure reproducibility
+        alpha = 1. / np.sqrt(hidden_dim) 
+        initializer = initializers.RandomUniform(minval=-alpha, maxval=alpha, seed=self.random_state)
+        
         model = keras.Sequential(
             [
                 keras.Input(shape=self.state_size),
-                layers.Dense(24, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer='glorot_uniform'),
-                layers.Dense(24, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer='glorot_uniform'),
-                layers.Dense(self.action_size, use_bias=True, activation="linear")
+                layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
+                layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
+                layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
+                layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
+                layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
+                layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
+                
+                layers.Dense(self.action_size, activation='linear')
                 
             ]
         )
@@ -131,9 +143,9 @@ class DQNLearningAgent:
         
         X, y = self._construct_training_set(minibatch)
         with tf.device(self.device):
-            #loss = self.model.train_on_batch(X, y)
-            history = self.model.fit(X, y, epochs=1, verbose=0)
-            loss = history.history['loss']
+            loss = self.model.train_on_batch(X, y)
+            # history = self.model.fit(X, y, epochs=1, verbose=0)
+            # loss = history.history['loss']
             
         _q = np.mean(y)
         

@@ -26,7 +26,7 @@ class QLearningAgent:
         self.discount_factor = discount_factor      # gamma
         self.exploration_rate = exploration_rate    # epsilon
         self.exploration_rate_min = 0.010
-        self.exploration_decay_rate = exploration_decay_rate # d
+        self.exploration_decay_rate = exploration_decay_rate
         self.state = np.zeros(state_size, dtype=int)
         self.action = 0
         self.action_size = action_size        
