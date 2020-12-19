@@ -6,67 +6,64 @@ Created on Thu Jun  8 09:52:56 2017
 @author: farismismar
 """
 
-# Used from: https://keon.io/deep-q-learning/
-# Check some more here: https://github.com/leimao/OpenAI_Gym_AI/tree/master/CartPole-v0/Deep_Q-Learning
-# https://github.com/keon/deep-q-learning/blob/master/ddqn.py
-
 # Deep Q-learning Agent
 import random
 import numpy as np
 from collections import deque
 from tensorflow import keras
-from tensorflow.keras import layers
+import tensorflow.keras.backend as K
+from tensorflow.keras import layers, initializers
 import tensorflow as tf
 from tensorflow.compat.v1 import set_random_seed
 import os
 
+
 class DQNLearningAgent:
-    def __init__(self, seed=0,
-                 learning_rate=0.2,
-                 discount_factor=1.0,
+    def __init__(self, learning_rate=0.2,
+                 discount_factor=0.995,
                  exploration_rate=1.0,
-                 exploration_decay_rate=0.91, batch_size=32,
-                 state_size=5, action_size=3):
+                 exploration_decay_rate=0.99, batch_size=32,
+                 state_size=4, action_size=3, random_state=None):
 
         self.learning_rate = learning_rate          # alpha
         self.discount_factor = discount_factor      # gamma
         self.exploration_rate = exploration_rate    # epsilon
-        self.exploration_rate_min = 0.010
+        self.exploration_rate_min = 0.01
         self.exploration_decay_rate = exploration_decay_rate # d
-        self.state = None
-        self.action = None
-        self.seed = seed
+
         self.state_size = state_size
         self.action_size = action_size
-        self.num_actions = action_size
         
         self.model = self._build_model()
-        self.target_model = self._build_model()
-#        self.update_target_model()
+
         self.memory = deque(maxlen=2000)
-        self.batch_size = batch_size        
-        self._losses = []
+        self.random_state = random_state
+        self.batch_size = batch_size
         self.prefer_gpu = True
         
-        self.q = np.random.rand(self.state_size, self.action_size)
-        
         # Add a few lines to caputre the seed for reproducibility.
-        np.random.seed(seed)
-        random.seed(seed)
-        os.environ['PYTHONHASHSEED'] = '0'        
-        set_random_seed(seed)
+        os.environ['PYTHONHASHSEED'] = '0'
+        random.seed(random_state)
+        self.rng = np.random.RandomState(random_state)
+        set_random_seed(random_state)
         
         self.use_cuda = len(tf.config.list_physical_devices('GPU')) > 0 and self.prefer_gpu
         self.device = "/gpu:0" if self.use_cuda else "/cpu:0"
 
+
+    def prepare_agent(self, env=None):
+
+        # Initialize the Q function.
+        self.q = self.rng.rand(self.state_size, self.action_size)        
+    
         
     def _build_model(self):
         # Neural Net for Deep Q learning Model from state_size |S| to action_size |A|
         model = keras.Sequential(
             [
                 keras.Input(shape=self.state_size),
-                layers.Dense(24, use_bias=True, activation="relu"),
-                layers.Dense(24, use_bias=True, activation="relu"),
+                layers.Dense(24, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer='glorot_uniform'),
+                layers.Dense(24, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer='glorot_uniform'),
                 layers.Dense(self.action_size, use_bias=True, activation="linear")
                 
             ]
@@ -74,65 +71,93 @@ class DQNLearningAgent:
         
         model.compile(loss='mse', optimizer=keras.optimizers.Adam(lr=self.learning_rate))
         return model
+    
+    
+    def _construct_training_set(self, replay):
+        # Select states and next states from replay memory
+        states = np.array([a[0] for a in replay])
+        new_states = np.array([a[3] for a in replay])
         
+        # Predict the expected Q of current state and new state using DQN
+        with tf.device(self.device):
+            Q = self.model.predict(states)
+            Q_new = self.model.predict(new_states)
+
+        replay_size = len(replay)
+        X = np.empty((replay_size, self.state_size))
+        y = np.empty((replay_size, self.action_size))
+        
+        # Construct training set
+        for i in np.arange(replay_size):
+            state_r, action_r, reward_r, new_state_r, done_r = replay[i]
+            action_r = int(action_r)
+            target = Q[i]
+            target[action_r] = reward_r
+
+            if not done_r:
+                target[action_r] += self.discount_factor * np.amax(Q_new[i])
+            else:
+                True # A placeholder
+                # If done, no need to take another step, 
+                # Environment will add max reward
+
+            X[i] = state_r
+            y[i] = target
+
+        return X, y
+    
+        
+    def remember(self, state, action, reward, next_state, done):
+        # Make sure we restrict memory size to specified limit
+        if len(self.memory) > 2000:
+            self.memory.pop(0)
+        self.memory.append((state, action, reward, next_state, done))
+        
+
+    def act(self, state, reward=None):
+        # Exploration/exploitation: choose a random action or select the best one.
+        if np.random.uniform(0, 1) <= self.exploration_rate:
+            return self.rng.randint(0, self.action_size)
+       
+        state = np.reshape(state, [1, self.state_size])
+        #states = states[:,0]
+        with tf.device(self.device):
+            act_values = self.model.predict(state)
+            
+        return np.argmax(act_values[0])  # returns action
+    
+    
+    def replay(self):
+        batch = min(self.batch_size, len(self.memory))
+        minibatch = random.sample(self.memory, batch)
+        
+        X, y = self._construct_training_set(minibatch)
+        with tf.device(self.device):
+            loss = self.model.train_on_batch(X, y)
+            #history = self.model.fit(X, y, epochs=1, verbose=0)
+            #loss = history.history['loss']
+            
+        _q = np.mean(y)
+        
+        return [_q, loss]
+    
+    
     def begin_episode(self, observation):
         # Reduce exploration over time.
         self.exploration_rate *= self.exploration_decay_rate
         if (self.exploration_rate < self.exploration_rate_min):
             self.exploration_rate = self.exploration_rate_min
-    
-        return np.zeros(self.state_size) # the action of (nothing done yet).
-        
-    def act(self, observation, reward=None):
-        if np.random.rand() <= self.exploration_rate:
-            return random.randrange(self.action_size)
-        observation = np.ones(self.state_size,dtype=int) * observation # force for MATLAB implicit conversion.
-#        observation = np.array(observation, dtype=int) # force for MATLAB implicit conversion.
-        act_values = self.model.predict(observation.reshape(1, self.state_size))
-        return np.argmax(act_values[0])  # returns action
-
-    def replay(self, batch_size):
-        minibatch = random.sample(self.memory, batch_size)
-        for state, action, reward, next_state, done in minibatch:
-            observation = np.ones(self.state_size,dtype=int) * state # force for MATLAB implicit conversion.
-            with tf.device(self.device):
-                target = self.model.predict(observation.reshape(1, self.state_size))
-            action = np.ones(self.action_size, dtype=int) * action # force for MATLAB conversion
-            action = action.reshape(1, self.action_size) 
-            if done:
-                action = action.astype(int)
-                target[0][action] = reward
-            else:
-                next_observation = np.ones(self.state_size,dtype=int) * next_state # force for MATLAB implicit conversion.
-                a = self.model.predict(next_observation.reshape(1, self.state_size))[0]
-                t = self.target_model.predict(next_observation.reshape(1, self.state_size))[0]
-                action = action.astype(int) # force for MATLAB implicit conversion.
-                target[0][action] = reward + self.discount_factor * t[np.argmax(a)]
-            #state = np.reshape(state, [1, self.state_size])
-            observation = np.ones(self.state_size,dtype=int) * state # force for MATLAB implicit conversion.
-            observation = observation.reshape(1, self.state_size)
-            #target =  np.ones(self.state_size,dtype=int) * target # force for MATLAB implicit conversion.
             
-            with tf.device(self.device):
-                self._history = self.model.fit(observation, target, epochs=1, verbose=0)
-            self.q = target  # save the q function.
+        # return an action at random
+        action = random.randrange(self.action_size)
 
-    def get_losses(self):
-        return self._losses
-
-    def update_target_model(self):
-        # copy weights from model to target_model
-        self.target_model.set_weights(self.model.get_weights())
-        return
-
-    def averageQ(self):
-        return self.q.mean().mean()
+        return action
     
-    def remember(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
-
+    
     def load(self, name):
         self.model.load_weights(name)
 
+
     def save(self, name):
         self.model.save_weights(name)
+    
