@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Feb 27 13:31:50 2019
+Created on Sat Dec 19 10:09:07 2020
+
 @author: farismismar
 """
 
@@ -106,7 +107,6 @@ class radio_environment:
         self.observation_space = spaces.Box(bounds_lower, bounds_upper, dtype=np.float32) # spaces.Discrete(2) # state size is here 
                 
         self.state = None
-#        self.steps_beyond_done = None
         self.received_sinr_dB = None
         self.serving_transmit_power_dB = None
       

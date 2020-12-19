@@ -12,6 +12,9 @@ import numpy as np
 # It is meant to replace a one-liner in the main driver to compare a DQN
 # with a tabular Q-learner, hence the extra dummy variables/methods.
 
+# Following from
+# https://github.com/YuriyGuts/cartpole-q-learning/blob/master/cartpole.py
+
 class QLearningAgent:
     def __init__(self, learning_rate=0.2,
                  discount_factor=0.995,

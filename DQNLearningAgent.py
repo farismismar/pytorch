@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Jun  8 09:52:56 2017
+Created on Sat Dec 19 10:09:07 2020
 
 @author: farismismar
 """
@@ -16,7 +16,6 @@ from tensorflow.keras import layers, initializers
 import tensorflow as tf
 from tensorflow.compat.v1 import set_random_seed
 import os
-
 
 class DQNLearningAgent:
     def __init__(self, learning_rate=0.2,
