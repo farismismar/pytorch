@@ -17,7 +17,7 @@ class QLearningAgent:
                  discount_factor=0.995,
                  exploration_rate=1.0,
                  exploration_decay_rate=0.99, batch_size=32,
-                 state_size=3, action_size=5, random_state=None):
+                 state_size=4, action_size=3, random_state=None):
         
         self.learning_rate = learning_rate          # alpha
         self.discount_factor = discount_factor      # gamma
@@ -27,17 +27,33 @@ class QLearningAgent:
         self.state = np.zeros(state_size, dtype=int)
         self.action = 0
         self.batch_size = batch_size # dummy variable -- does nothing
-        self.num_actions = action_size
+        self.action_size = action_size        
         self.state_size = state_size
         
         self.memory = [] # another useless variable
         
-        # Add a few lines to caputre the seed for reproducibility.
+        # Add a few lines to capture the seed for reproducibility.
         self.rng = np.random.RandomState(random_state)
+
+
+    def prepare_agent(self, env):
+        # check the site distance configuration in the environment
+        self._state_bins = [
+            # User X - serv
+            self._discretize_range(-env.cell_radius, env.cell_radius, self.state_size),
+            # User Y - serv
+            self._discretize_range(-env.cell_radius, env.cell_radius, self.state_size),
+            # Serving BS power.
+            self._discretize_range(0, env.max_tx_power, self.state_size),
+            # Beamforming
+            self._discretize_range(0, env.M_ULA, self.state_size),
+        ]
         
         # Create a clean Q-Table.
-        self.action_size = action_size
-        self.q = np.zeros(shape=(state_size, self.num_actions))
+        self._max_bins = max(len(bin) for bin in self._state_bins)
+        num_states = (self._max_bins + 1) ** len(self._state_bins)
+        self.q = np.zeros(shape=(num_states, self.action_size))
+    
     
         
     def begin_episode(self, observation):
@@ -46,21 +62,21 @@ class QLearningAgent:
         if (self.exploration_rate < self.exploration_rate_min):
             self.exploration_rate = self.exploration_rate_min
     
-        # Get the action for the initial state.
-        self.state = observation + np.zeros(self.state_size, dtype=int)
-        state = self.state[0]
-        return np.argmax(self.q[state])
+        self.state = self._build_state(observation)
+        
+        return np.argmax(self.q[self.state, :]) # returns the action with largest Q
         
     
     def act(self, observation, reward):
-        next_state = observation[0]
+        next_state = self._build_state(observation) # need to be integer
+        
         state = self.state
         if isinstance(state, np.ndarray):
             state = state[0]
         # Exploration/exploitation: choose a random action or select the best one.
         enable_exploration = (1 - self.exploration_rate) <= self.rng.uniform(0, 1)
         if enable_exploration:
-            next_action = self.rng.randint(0, self.num_actions)
+            next_action = self.rng.randint(0, self.action_size)
         else:
             next_action = np.argmax(self.q[next_state])
         
@@ -73,18 +89,26 @@ class QLearningAgent:
         return next_action
 
 
-    def averageQ(self):
-        return self.q.mean()
-
-    
+    def replay(self):
+        loss = 0.0
+        return [self.q.mean(), loss]
+      
     def remember(self, prev_observation, action, reward, observation, done):
         return # this is a dummy function for compatibility
 
+    # Private members:
+    def _build_state(self, observation):
+        # Discretize the observation features and reduce them to a single integer.
+        state = sum(
+            self._discretize_value(feature, self._state_bins[i]) * ((self._max_bins + 1) ** i)
+            for i, feature in enumerate(observation)
+        )
+        return state
     
-    def get_losses(self):
-    	# There are no losses in Q-learning.  Since Q is not estimated, but rather looked up.
-        return [0]
-
+    def _discretize_value(self, value, bins):
+        return np.digitize(x=value, bins=bins)
     
-    def update_target_model(self):
-        return
+    def _discretize_range(self, lower_bound, upper_bound, num_bins):
+        return np.linspace(lower_bound, upper_bound, num_bins + 1)[1:-1]
+    
+ 
