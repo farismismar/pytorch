@@ -52,13 +52,14 @@ class radio_environment:
         self.num_actions = 3
         self.num_observations = None # Not needed; it will be computed from gym.spaces.Box()
         self.seed(random_state) # initializes the local random generator
-        self.speed = 1 # km/h.
+        self.speed = 0 # km/h.
         self.M_ULA = 4
         self.cell_radius = 150 # in meters.
         self.min_sinr = -3 # in dB
         self.sinr_target = 15 # dB
         self.max_tx_power = 40 # in Watts        
-        self.f_c = 28e9 # Hz
+        self.f_c = 3.5e9 # Hz
+        self.p_interference = 0.0 
         self.G_ant_no_beamforming = 11 # dBi
         self.prob_LOS = 0.8 # Probability of LOS transmission
 
@@ -140,11 +141,11 @@ class radio_environment:
         # only once a period, perform BF
         self.step_count += 1
         if (action == 0):
-            pt_serving *= 10**(1/10.)
+            pt_serving *= 10**(0.5/10.)
             self.power_changed1 = True
             reward += self.step_count % self.periodicity
         elif (action == 1):
-            pt_serving *= 10**(-1/10.)
+            pt_serving *= 10**(-0.5/10.)
             self.power_changed1 = True
             reward += self.step_count % self.periodicity
         if (action == 2):
@@ -194,7 +195,7 @@ class radio_environment:
                 (received_sinr >= self.min_sinr) and self.power_changed1 and self.bf_changed1 and (received_sinr >= self.sinr_target)
                 
         abort = (pt_serving > self.max_tx_power) or (received_sinr < self.min_sinr) or \
-                (received_sinr > 30) # consider more than 30 dB SINR is too high.
+                (received_sinr > 35) # consider more than 35 dB SINR is too high.
 
         # Update the state.
         self.state = (x_ue_1, y_ue_1, pt_serving, f_n_bs1)
@@ -292,7 +293,7 @@ class radio_environment:
             received_power = pt_bs1 * LA.norm(h_1, ord=2) ** 2
                 
         # TODO: interference power can be a sporadic signal with a bernoulli dist.
-        interference_power = self.np_random.binomial(1, 0.5) * 1 # in Watts
+        interference_power = self.np_random.binomial(1, self.p_interference) * 1 # in Watts
         interference_plus_noise_power = interference_power + noise_power
         received_sinr = 10*np.log10(received_power / interference_plus_noise_power)
 

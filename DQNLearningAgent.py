@@ -89,7 +89,6 @@ class DQNLearningAgent:
         # Construct training set
         for i in np.arange(replay_size):
             state_r, action_r, reward_r, new_state_r, done_r = replay[i]
-            action_r = int(action_r)
             target = Q[i]
             target[action_r] = reward_r
 
@@ -132,9 +131,9 @@ class DQNLearningAgent:
         
         X, y = self._construct_training_set(minibatch)
         with tf.device(self.device):
-            loss = self.model.train_on_batch(X, y)
-            #history = self.model.fit(X, y, epochs=1, verbose=0)
-            #loss = history.history['loss']
+            #loss = self.model.train_on_batch(X, y)
+            history = self.model.fit(X, y, epochs=1, verbose=0)
+            loss = history.history['loss']
             
         _q = np.mean(y)
         

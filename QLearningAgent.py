@@ -29,18 +29,15 @@ class QLearningAgent:
         self.exploration_decay_rate = exploration_decay_rate # d
         self.state = np.zeros(state_size, dtype=int)
         self.action = 0
-        self.batch_size = batch_size # dummy variable -- does nothing
         self.action_size = action_size        
         self.state_size = state_size
-        
-        self.memory = [] # another useless variable
         
         # Add a few lines to capture the seed for reproducibility.
         self.rng = np.random.RandomState(random_state)
 
 
     def prepare_agent(self, env):
-        # check the site distance configuration in the environment
+        # Given that the state is actually continuous, a binning is necessary
         self._state_bins = [
             # User X - serv
             self._discretize_range(-env.cell_radius, env.cell_radius, self.state_size),
@@ -52,11 +49,11 @@ class QLearningAgent:
             self._discretize_range(0, env.M_ULA, self.state_size),
         ]
         
-        # Create a clean Q-Table.
         self._max_bins = max(len(bin) for bin in self._state_bins)
         num_states = (self._max_bins + 1) ** len(self._state_bins)
+        
+        # Create a clean Q-Table.
         self.q = np.zeros(shape=(num_states, self.action_size))
-    
     
         
     def begin_episode(self, observation):

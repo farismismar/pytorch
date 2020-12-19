@@ -7,24 +7,35 @@ Created on Sat Dec 19 15:13:06 2020
 """
 
 import os
-import numpy as np
 from colorama import Fore, Style
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
 from environment import radio_environment
 from DQNLearningAgent import DQNLearningAgent as QLearner # Deep with GPU and CPU fallback
 #from QLearningAgent import QLearningAgent as QLearner
 
-MAX_EPISODES = 10000
+MAX_EPISODES = 1000
 
-os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID";
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
  
-# The GPU id to use, usually either "0" or "1";
-os.environ["CUDA_VISIBLE_DEVICES"]="0";   # My NVIDIA GTX 1080 Ti FE GPU
-
+# The GPU id to use, usually either "0" or "1"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"   # My NVIDIA GTX 1080 Ti FE GPU
 
 os.chdir('/Users/farismismar/Desktop/deep')
 
-def run_agent_q(env, radio_frame, plotting=False):
+plt.rc('text', usetex=True)
+plt.rc('font', family='serif')
+plt.rcParams['axes.titlesize'] = 24
+plt.rcParams['axes.titlepad'] = 18
+plt.rcParams['axes.labelsize'] = 16
+plt.rcParams['font.size'] = 12
+plt.rcParams['text.latex.preamble'] = \
+    r'\usepackage{amsmath}\usepackage{amssymb}'
+
+
+def run_agent_q(env, radio_frame, plotting=True):
     max_episodes_to_run = MAX_EPISODES # needed to ensure epsilon decays to min
     max_timesteps_per_episode = radio_frame
     successful = False
@@ -73,7 +84,7 @@ def run_agent_q(env, radio_frame, plotting=False):
             agent.remember(observation, action, reward, next_observation, done)
                            
             # Learn control policy
-            loss, q = agent.replay()
+            q, loss = agent.replay()
                       
             episode_loss.append(loss)
             episode_q.append(q)
@@ -107,7 +118,9 @@ def run_agent_q(env, radio_frame, plotting=False):
         if (successful == True) and (abort == False):
             print(Fore.GREEN + 'SUCCESS.  Total reward = {}.  Loss = {}.'.format(total_reward, loss_z))
             print(Style.RESET_ALL)
+            episode_successful.append(episode_index)
             
+            # Keep an eye on the best episode
             if (total_reward > max_reward):
                 max_reward, max_episode = total_reward, episode_index
         else:
@@ -118,19 +131,42 @@ def run_agent_q(env, radio_frame, plotting=False):
         
         losses.append(loss_z)
         Q_values.append(q_z)
-        
-        if (successful):
-            episode_successful.append(episode_index)
-
-            optimal = 'Episode {}/{} generated the highest reward {}.'.format(max_episode, MAX_EPISODES, max_reward)
-            print(optimal)
-
 
     if (len(episode_successful) == 0):
         print("Goal cannot be reached after {} episodes.  Try to increase maximum episodes.".format(max_episodes_to_run))
+    else:
+        print(f'Episode {max_episode}/{MAX_EPISODES} generated the highest reward {max_reward}.')
 
-radio_frame = 15
-seeds = np.arange(50).tolist()
+    if plotting:
+        summary = pd.DataFrame(data={'Episode': 1 + np.arange(max_episodes_to_run),
+                                     'Avg. Loss': losses,
+                                     'Avg. Q': Q_values})
+        plot_summary(summary)
+
+
+def plot_summary(df):
+    fig = plt.figure(figsize=(8,5))
+    
+    plot1, = plt.plot(df['Episode'], df['Avg. Q'])
+    plt.grid(which='both', linestyle='--')
+    
+    ax = fig.gca()    
+    ax_sec = ax.twinx()
+    plot2, = ax_sec.plot(df['Episode'], df['Avg. Loss'], lw=2, label=r'Average loss')       
+    plt.xlabel('Episode')    
+    ax.set_ylabel(r'$Q$')
+    ax_sec.set_ylabel(r'$L$')    
+    plt.legend([plot1, plot2], [r'Average $Q$', r'Average loss'],
+               bbox_to_anchor=(0.1, -0.03, 0.86, 1), bbox_transform=fig.transFigure, 
+               loc='lower center', ncol=3, mode="expand", borderaxespad=0.)
+    
+    plt.tight_layout()
+    plt.show()
+    plt.close(fig)
+    
+    
+radio_frame = 5
+seeds = np.arange(1).tolist()
 
 for seed in seeds:
  
