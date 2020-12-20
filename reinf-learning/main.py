@@ -59,7 +59,7 @@ def run_agent_q(env, radio_frame, plotting=True):
     for episode_index in 1 + np.arange(max_episodes_to_run):
         observation = env.reset()
     
-        print('Ep.        | eta | TS | Recv. SINR (srv) | Serv. Tx Pwr | Reward | Action')
+        print('Ep.        | eta | TS | Recv. SINR | BS Tx Pwr | Reward | Action')
         print('--'*43)
             
         (_, _, pt_serving, _) = observation
@@ -104,7 +104,7 @@ def run_agent_q(env, radio_frame, plotting=True):
             # Store the action, reward, and observation elements, done|aborted
             # for further postprocessing and plotting
             
-            output_t = pd.Series([episode_index, timestep_index, x_t, y_t, tx_power_t, bf_index_t, action, done, abort])
+            output_t = pd.Series([episode_index, timestep_index, x_t, y_t, received_sinr, tx_power_t, bf_index_t, action, done, abort])
             output_z = output_z.append(output_t, ignore_index=True)
             
             if abort == True:
@@ -145,7 +145,7 @@ def run_agent_q(env, radio_frame, plotting=True):
     else:
         print(f'Episode {max_episode}/{MAX_EPISODES} generated the highest reward {max_reward}.')
 
-    output.columns = ['Episode', 'Time', 'UE x', 'UE y', 'BS TX Power', 'Beam Index', 'Action', 'Done', 'Abort', 'Reward', 'Loss', 'Q']
+    output.columns = ['Episode', 'Time', 'UE x', 'UE y', 'UE SINR', 'BS TX Power', 'Beam Index', 'Action', 'Done', 'Abort', 'Reward', 'Loss', 'Q']
     output.to_csv('output.csv', index=False)
     
     if plotting:

@@ -20,13 +20,13 @@ import scipy.constants
     # cell radius
     # UE movement speed
     # BS max tx power
-    # BS antenna
-    # UE noise figure
     # Center frequency
-    # Transmit antenna isotropic gain
     # Antenna heights
-    # Shadow fading margin
-    # Number of ULA antenna elements
+    # Number of ULA antenna elements on BS
+    # Number of multipaths
+    # DFT-based beamforming codebook
+    # Probability of LOS transmission
+    # Target SINR and minimum SINR
     # Oversampling factor
 
 class radio_environment:
@@ -65,7 +65,6 @@ class radio_environment:
 
         self.c = scipy.constants.c
 
-        self.step_count = 0 # which step
         self.power_changed1 = False # did the BS power legitimally change?        
         self.bf_changed1 = False # did the BS power legitimally change?
         
@@ -124,8 +123,6 @@ class radio_environment:
         self.power_changed1 = False
         self.bf_changed1 = False 
 
-        self.step_count = 0
-
         return np.array(self.state)
     
     def step(self, action):
@@ -138,15 +135,17 @@ class radio_environment:
         # Power control and beam change
         if (action == 0):
             pt_serving *= 10**(0.5/10.)
-            f_n_bs1 = (f_n_bs1 + 1) % (self.k_oversample * self.M_ULA)
+            if self.use_beamforming:
+                f_n_bs1 = (f_n_bs1 + 1) % (self.k_oversample * self.M_ULA)
+                self.bf_changed1 = True
             self.power_changed1 = True
-            self.bf_changed1 = True
             reward += 1
         elif (action == 1):
             pt_serving *= 10**(-0.5/10.)
-            f_n_bs1 = (f_n_bs1 + 1) % (self.k_oversample * self.M_ULA)
+            if self.use_beamforming:
+                f_n_bs1 = (f_n_bs1 + 1) % (self.k_oversample * self.M_ULA)
+                self.bf_changed1 = True    
             self.power_changed1 = True
-            self.bf_changed1 = True
             reward += 1
         # Power control and same beam
         elif (action == 2):
