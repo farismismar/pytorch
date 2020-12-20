@@ -17,7 +17,6 @@ import scipy.constants
 # https://github.com/openai/gym/blob/master/gym/envs/classic_control/cartpole.py
 
 # Environment parameters
-    # Number of slotes per radio frame
     # cell radius
     # UE movement speed
     # BS max tx power
@@ -57,13 +56,12 @@ class radio_environment:
         self.M_ULA = 4
         self.cell_radius = 150 # in meters.
         self.min_sinr = -3 # in dB
-        self.sinr_target = 15 # dB
+        self.sinr_target = 12 # dB
         self.max_tx_power = 40 # in Watts        
         self.f_c = 3.5e9 # Hz
         self.p_interference = 0.05 
         self.G_ant_no_beamforming = 11 # dBi
-        self.prob_LOS = 0.2 # Probability of LOS transmission
-        self.radio_frame = 15 # number of slots
+        self.prob_LOS = 0.4 # Probability of LOS transmission
         
         self.c = scipy.constants.c
 
@@ -89,7 +87,7 @@ class radio_environment:
         # for Reinforcement Learning
         self.step_count = 0
         self.reward_min = -5
-        self.reward_max = 100
+        self.reward_max = 20
         
         bounds_lower = np.array([
             -self.cell_radius,
@@ -202,7 +200,7 @@ class radio_environment:
         # Did we find a FEASIBLE NON-DEGENERATE solution?
         done = (pt_serving <= self.max_tx_power) and (pt_serving >= 0) and \
                 (received_sinr >= self.min_sinr) and self.power_changed1 and self.bf_changed1 and \
-                (received_sinr >= self.sinr_target) and (self.step_count >= self.radio_frame - 2)
+                (received_sinr >= self.sinr_target)
                 
         abort = (pt_serving > self.max_tx_power) or (received_sinr < self.min_sinr) or \
                 (received_sinr > 35) # consider more than 35 dB SINR is too high.

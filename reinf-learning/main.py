@@ -18,6 +18,7 @@ from DQNLearningAgent import DQNLearningAgent as QLearner # Deep with GPU and CP
 #from QLearningAgent import QLearningAgent as QLearner
 
 MAX_EPISODES = 1000
+MAX_TIME_STEPS = 15
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
  
@@ -43,7 +44,7 @@ def run_agent_q(env, plotting=True):
     global output, summary
    
     max_episodes_to_run = MAX_EPISODES # needed to ensure epsilon decays to min
-    max_timesteps_per_episode = env.radio_frame
+    max_timesteps_per_episode = MAX_TIME_STEPS
     successful = False
     
     episode_successful = [] # a list to save the good episodes
@@ -94,16 +95,20 @@ def run_agent_q(env, plotting=True):
 
             # make next_state the new current state for the next frame.
             observation = next_observation
-            total_reward += reward            
+            total_reward += reward
 
             successful = done and (total_reward > 0) and (abort == False)
             
             # Let us know how we did.
             print(f'{episode_index}/{max_episodes_to_run} | {agent.exploration_rate:.2f} | {timestep_index} | {received_sinr} dB | {tx_power_t} W | {total_reward} | {action} | ', end='')
     
+            # Finished too soon?
+            if done and timestep_index < max_timesteps_per_episode - 2:
+                total_reward += env.reward_min
+                done = False
+                
             # Store the action, reward, and observation elements, done|aborted
             # for further postprocessing and plotting
-            
             output_t = pd.Series([episode_index, timestep_index, x_t, y_t, received_sinr, tx_power_t, bf_index_t, action, total_reward, done, abort])
             output_z = output_z.append(output_t, ignore_index=True)
             

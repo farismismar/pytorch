@@ -18,10 +18,10 @@ from tensorflow.compat.v1 import set_random_seed
 import os
 
 class DQNLearningAgent:
-    def __init__(self, learning_rate=0.1,
+    def __init__(self, learning_rate=0.05,
                  discount_factor=0.995,
                  exploration_rate=1.0,
-                 exploration_decay_rate=0.99, batch_size=32,
+                 exploration_decay_rate=0.91, batch_size=16,
                  state_size=4, action_size=4, random_state=None):
 
         self.learning_rate = learning_rate          # alpha
@@ -70,6 +70,10 @@ class DQNLearningAgent:
                 layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
                 layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
                 layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
+                layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
+                layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
+                layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
+
                 layers.Dense(self.action_size, activation='linear') 
             ]
         )
