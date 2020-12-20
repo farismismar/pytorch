@@ -58,7 +58,7 @@ class DQNLearningAgent:
         
     def _build_model(self):
         # Neural Net for Deep Q learning Model from state_size |S| to action_size |A|
-        # Keep adding depth until the losses start to subside while Q increases.
+        # Keep adding depth until the losses start to subside (from explosive) while Q increases.
         hidden_dim = 8
         
         # Ensure reproducibility
@@ -68,8 +68,6 @@ class DQNLearningAgent:
         model = keras.Sequential(
             [
                 keras.Input(shape=self.state_size),
-                layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
-                layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
                 layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
                 layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
                 layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),

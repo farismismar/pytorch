@@ -17,6 +17,7 @@ import scipy.constants
 # https://github.com/openai/gym/blob/master/gym/envs/classic_control/cartpole.py
 
 # Environment parameters
+    # Number of slotes per radio frame
     # cell radius
     # UE movement speed
     # BS max tx power
@@ -52,17 +53,18 @@ class radio_environment:
         self.num_actions = 4
         self.num_observations = None # Not needed; it will be computed from gym.spaces.Box()
         self.seed(random_state) # initializes the local random generator
-        self.speed = 0.1 # km/h.
+        self.speed = 1 # km/h.
         self.M_ULA = 4
         self.cell_radius = 150 # in meters.
         self.min_sinr = -3 # in dB
-        self.sinr_target = 10 # dB
+        self.sinr_target = 15 # dB
         self.max_tx_power = 40 # in Watts        
         self.f_c = 3.5e9 # Hz
-        self.p_interference = 0.1 
+        self.p_interference = 0.05 
         self.G_ant_no_beamforming = 11 # dBi
         self.prob_LOS = 0.2 # Probability of LOS transmission
-
+        self.radio_frame = 15 # number of slots
+        
         self.c = scipy.constants.c
 
         self.power_changed1 = False # did the BS power legitimally change?        
@@ -85,7 +87,8 @@ class radio_environment:
         self.f_n_bs1 = None  # The index in the codebook for serving BS
 
         # for Reinforcement Learning
-        self.reward_min = -20
+        self.step_count = 0
+        self.reward_min = -5
         self.reward_max = 100
         
         bounds_lower = np.array([
@@ -122,6 +125,7 @@ class radio_environment:
         
         self.power_changed1 = False
         self.bf_changed1 = False 
+        self.step_count = 0
 
         return np.array(self.state)
     
@@ -132,21 +136,23 @@ class radio_environment:
         reward = 0
         x_ue_1, y_ue_1, pt_serving, f_n_bs1 = state
 
+        self.step_count += 1
+        
         # Power control and beam change
         if (action == 0):
-            pt_serving *= 10**(0.5/10.)
+            pt_serving *= 10**(1/10.)
             if self.use_beamforming:
                 f_n_bs1 = (f_n_bs1 + 1) % (self.k_oversample * self.M_ULA)
                 self.bf_changed1 = True
             self.power_changed1 = True
-            reward += 1
+            reward += 2
         elif (action == 1):
-            pt_serving *= 10**(-0.5/10.)
+            pt_serving *= 10**(-1/10.)
             if self.use_beamforming:
                 f_n_bs1 = (f_n_bs1 + 1) % (self.k_oversample * self.M_ULA)
                 self.bf_changed1 = True    
             self.power_changed1 = True
-            reward += 1
+            reward += 2
         # Power control and same beam
         elif (action == 2):
             pt_serving *= 10**(0.5/10.)
@@ -195,7 +201,8 @@ class radio_environment:
 
         # Did we find a FEASIBLE NON-DEGENERATE solution?
         done = (pt_serving <= self.max_tx_power) and (pt_serving >= 0) and \
-                (received_sinr >= self.min_sinr) and self.power_changed1 and self.bf_changed1 and (received_sinr >= self.sinr_target)
+                (received_sinr >= self.min_sinr) and self.power_changed1 and self.bf_changed1 and \
+                (received_sinr >= self.sinr_target) and (self.step_count >= self.radio_frame - 2)
                 
         abort = (pt_serving > self.max_tx_power) or (received_sinr < self.min_sinr) or \
                 (received_sinr > 35) # consider more than 35 dB SINR is too high.
