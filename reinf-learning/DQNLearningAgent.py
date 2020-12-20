@@ -74,7 +74,6 @@ class DQNLearningAgent:
                 layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
                 layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
                 layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
-                
                 layers.Dense(self.action_size, activation='linear')
                 
             ]
