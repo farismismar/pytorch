@@ -18,7 +18,7 @@ from tensorflow.compat.v1 import set_random_seed
 import os
 
 class DQNLearningAgent:
-    def __init__(self, learning_rate=0.2,
+    def __init__(self, learning_rate=0.1,
                  discount_factor=0.995,
                  exploration_rate=1.0,
                  exploration_decay_rate=0.99, batch_size=32,
@@ -51,9 +51,7 @@ class DQNLearningAgent:
 
 
     def prepare_agent(self, env=None):
-
-        # Initialize the Q function.
-        self.q = self.rng.rand(self.state_size, self.action_size)        
+        return    # to match the vanilla Q-learning---not needed otherwise.
     
         
     def _build_model(self):
@@ -72,8 +70,7 @@ class DQNLearningAgent:
                 layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
                 layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
                 layers.Dense(hidden_dim, use_bias=True, activation="relu", bias_initializer='zeros', kernel_initializer=initializer),
-                layers.Dense(self.action_size, activation='linear')
-                
+                layers.Dense(self.action_size, activation='linear') 
             ]
         )
         

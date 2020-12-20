@@ -16,7 +16,7 @@ import numpy as np
 # https://github.com/YuriyGuts/cartpole-q-learning/blob/master/cartpole.py
 
 class QLearningAgent:
-    def __init__(self, learning_rate=0.2,
+    def __init__(self, learning_rate=0.1,
                  discount_factor=0.995,
                  exploration_rate=1.0,
                  exploration_decay_rate=0.99, batch_size=32,
