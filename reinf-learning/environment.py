@@ -128,6 +128,8 @@ class radio_environment:
         return np.array(self.state)
     
     def step(self, action):
+        if not isinstance(action, int):
+            action = int(action)
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
 
         state = self.state
