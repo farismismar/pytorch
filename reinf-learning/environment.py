@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Dec 19 10:09:07 2020
-
 @author: farismismar
 """
 
@@ -11,91 +10,119 @@ import gym
 from gym import spaces
 from gym.utils import seeding
 import numpy as np
-import pandas as pd
+from numpy import linalg as LA
+import scipy.constants
 
 # An attempt to follow
 # https://github.com/openai/gym/blob/master/gym/envs/classic_control/cartpole.py
 
 # Environment parameters
-    # Number of slots per radio frame
-    # Pilot data.    
-    # Target SNR
-    # Equalizer
-    # Quantizer resolution
-    
+    # cell radius
+    # UE movement speed
+    # BS max tx power
+    # Center frequency
+    # Antenna heights
+    # Number of ULA antenna elements on BS
+    # Number of multipaths
+    # DFT-based beamforming codebook
+    # Probability of LOS transmission
+    # Target SINR and minimum SINR
+    # Oversampling factor
+
 class radio_environment(gym.Env):
     '''    
         Observation: 
-            Type: Box(2)
+            Type: Box(4)
             Num Observation                                    Min      Max
-            0   Re(h)                                          -1       1
+            0   User1 server X                                 -r       r
+            1   User1 server Y                                 -r       r
+            2   Serving BS Power                               5        40W
+            3   BF codebook index for Serving                  0        M-1
             
         Actions:
             Type: Discrete(3)
             Num	Action
-            0	Increase real
-            1   Decrease real
-            2	Increase imag
-            3   Decrease imag
+            0	Power up by 1 dB using a new beam index
+            1   Power down by 1 dB using a new beam index
+            2	Power up by 1 dB using same beam index
+            3   Power down by 1 dB using same beam index
             
     '''     
-    def __init__(self, N, T, SNR, random_state=None):
+    def __init__(self, random_state=None):
         self.num_actions = 4
         self.num_observations = None # Not needed; it will be computed from gym.spaces.Box()
         self.seed(random_state) # initializes the local random generator
-        self.error_target = 0.5 # Error-free channel estimation
-        self.varepsilon = 0.005 # step of increase/decrease of h.
-        self.M = 4 # QPSK
-        self.b = np.inf
-        self.f_c = 3.5e9
-        self.v = 2
-        self.sc_spacing = 15e3
-        self.symbols_per_subframe = 12
-        self.equalizer = 'MMSE'
-        self.true_h = []
+        self.speed = 1 # km/h.
+        self.M_ULA = 4
+        self.cell_radius = 150 # in meters.
+        self.min_sinr = -3 # in dB
+        self.sinr_target = 12 # dB
+        self.max_tx_power = 40 # in Watts        
+        self.f_c = 3.5e9 # Hz
+        self.p_interference = 0.05 
+        self.G_ant_no_beamforming = 11 # dBi
+        self.prob_LOS = 0.4 # Probability of LOS transmission
         
-        self.N = N
-        self.T = T
-        self.SNR = SNR
-        self.mse = None
-        # self.ber = None    
+        self.c = scipy.constants.c
+
+        self.power_changed1 = False # did the BS power legitimally change?        
+        self.bf_changed1 = False # did the BS power legitimally change?
+        
+        # Where are the base stations?
+        self.x_bs_1, self.y_bs_1 = 0, 0
+        
+        # for Beamforming
+        self.use_beamforming = True
+        self.k_oversample = 1 # oversampling factor
+        self.Np = 2 # from 3 to 5 for mmWave
+        self.F = np.zeros([self.M_ULA, self.k_oversample*self.M_ULA], dtype=complex)
+        self.theta_n = scipy.constants.pi * np.arange(start=0., stop=1., step=1./(self.k_oversample*self.M_ULA))
+        
+        # Beamforming codebook F
+        for n in np.arange(self.k_oversample*self.M_ULA):
+            f_n = self._compute_bf_vector(self.theta_n[n])
+            self.F[:,n] = f_n
+        self.f_n_bs1 = None  # The index in the codebook for serving BS
 
         # for Reinforcement Learning
         self.step_count = 0
         self.reward_min = -5
-        self.reward_max = 100        
+        self.reward_max = 20
         
         bounds_lower = np.array([
-            -1,
-            -1])
+            -self.cell_radius,
+            -self.cell_radius,
+            1,
+            0])
 
         bounds_upper = np.array([
-            1,
-            1])
+            self.cell_radius,
+            self.cell_radius,
+            self.max_tx_power,
+            self.k_oversample*self.M_ULA - 1])
 
         self.action_space = spaces.Discrete(self.num_actions) # action size is here
-        self.observation_space = spaces.Box(bounds_lower, bounds_upper, dtype=np.float32) # spaces.Discrete(2) # state size is here                 
+        self.observation_space = spaces.Box(bounds_lower, bounds_upper, dtype=np.float32) # spaces.Discrete(2) # state size is here 
+                
         self.state = None
+        self.received_sinr_dB = None
+        self.serving_transmit_power_dB = None
       
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         
     def reset(self):
-        
-        # Obtain a new channel
-        # Rayleigh-fading channel, which is a 
-        # unity gain channel with i.i.d. Gaussian entries and zero mean.
-        self.true_h = [1./np.sqrt(2) * self.np_random.normal(loc=0, scale=1),
-                      1./np.sqrt(2) * self.np_random.normal(loc=0, scale=1)                      
+        # Initialize f_n of cell
+        self.f_n_bs1 = self.np_random.randint(self.M_ULA)
+                
+        self.state = [self.np_random.uniform(low=-self.cell_radius, high=self.cell_radius),
+                      self.np_random.uniform(low=-self.cell_radius, high=self.cell_radius),
+                      np.round(self.np_random.uniform(low=1, high=self.max_tx_power), 2),
+                      self.f_n_bs1
                       ]
         
-        # Initialize a channel at random.
-        self.state = [1./np.sqrt(2) * self.np_random.normal(loc=0, scale=1),
-                      1./np.sqrt(2) * self.np_random.normal(loc=0, scale=1)                      
-                      ]
-        
-        self.pilot_signals, self.operational_signals = self.generate_pilot_signals(self.N, self.T, self.SNR)
-
+        self.power_changed1 = False
+        self.bf_changed1 = False 
         self.step_count = 0
 
         return np.array(self.state)
@@ -107,48 +134,85 @@ class radio_environment(gym.Env):
 
         state = self.state
         reward = 0
-        h_hat_I, h_hat_Q = state
+        x_ue_1, y_ue_1, pt_serving, f_n_bs1 = state
 
         self.step_count += 1
         
         # Power control and beam change
         if (action == 0):
-            h_hat_I += self.varepsilon
+            pt_serving *= 10**(1/10.)
+            if self.use_beamforming:
+                f_n_bs1 = (f_n_bs1 + 1) % (self.k_oversample * self.M_ULA)
+                self.bf_changed1 = True
+            self.power_changed1 = True
             reward += 2
         elif (action == 1):
-            h_hat_I -= self.varepsilon
-            reward += 1     
-        elif (action == 2):
-            h_hat_Q += self.varepsilon
+            pt_serving *= 10**(-1/10.)
+            if self.use_beamforming:
+                f_n_bs1 = (f_n_bs1 + 1) % (self.k_oversample * self.M_ULA)
+                self.bf_changed1 = True    
+            self.power_changed1 = True
             reward += 2
+        # Power control and same beam
+        elif (action == 2):
+            pt_serving *= 10**(0.5/10.)
+            self.power_changed1 = True
+            self.bf_changed1 = False
         elif (action == 3):
-            h_hat_Q -= self.varepsilon
-            reward += 1     
+            pt_serving *= 10**(-0.5/10.)
+            self.power_changed1 = True
+            self.bf_changed1 = False
         if (action > self.num_actions - 1):
             print('WARNING: Invalid action played!')
             reward = 0
             return [], 0, False, True
+        
+        pt_serving = np.round(pt_serving, 2)
+        
+        # move the UEs at a speed of v, in a random direction
+        v = self.speed * 5./18 # in m/sec
+        theta_1, theta_2 = self.np_random.uniform(low=-scipy.constants.pi, high=scipy.constants.pi, size=2)
+        
+        dx_1 = v * math.cos(theta_1)
+        dy_1 = v * math.sin(theta_1)
 
-        # keep track of state and BER:        
-        h_hat = h_hat_I + 1j * h_hat_Q
-        h_hat = h_hat / np.abs(h_hat) ** 2 # Normalize h_hat
+        # Move UE 1, but within cell radius
+        x_ue_1 += dx_1
+        y_ue_1 += dy_1
         
-        true_h = self.true_h[0] + 1j * self.true_h[1]
+        if x_ue_1 > self.cell_radius:
+            x_ue_1 = self.cell_radius
+        elif x_ue_1 < -self.cell_radius:
+            x_ue_1 = -self.cell_radius
+            
+        if y_ue_1 > self.cell_radius:
+            y_ue_1 = self.cell_radius
+        elif y_ue_1 < -self.cell_radius:
+            y_ue_1 = -self.cell_radius
         
-        # error = self._retrieve_ber(h_hat, self.pilot_signals)
-        # self.ber = error
-        error = np.mean(np.abs(true_h - h_hat) ** 2)
-        self.mse = error
+        # Update the beamforming codebook index
+        self.f_n_bs1 = f_n_bs1
+                
+        received_power, received_sinr = self._compute_rf(x_ue_1, y_ue_1, pt_serving)
+            
+        # keep track of quantities...
+        self.received_sinr_dB = received_sinr 
+        self.serving_transmit_power_dBm = 10*np.log10(pt_serving*1e3)
 
         # Did we find a FEASIBLE NON-DEGENERATE solution?
-        done = (error >= 0) and \
-                (error <= self.error_target)
+        done = (pt_serving <= self.max_tx_power) and (pt_serving >= 0) and \
+                (received_sinr >= self.min_sinr) and self.power_changed1 and self.bf_changed1 and \
+                (received_sinr >= self.sinr_target)
                 
-        abort = False
+        abort = (pt_serving > self.max_tx_power) or (received_sinr < self.min_sinr) or \
+                (received_sinr > 35) # consider more than 35 dB SINR is too high.
 
         # Update the state.
-        self.state = (np.real(h_hat), np.imag(h_hat))
-
+        self.state = (x_ue_1, y_ue_1, pt_serving, f_n_bs1)
+     
+        # # Reward is how close we are to target
+        # reward += int(received_sinr - self.sinr_target) * 2
+        
         if abort == True:
             done = False
             reward = self.reward_min
@@ -157,151 +221,132 @@ class radio_environment(gym.Env):
 
         return np.array(self.state), reward, done, abort
 
-   
-    def _retrieve_ber(self, h_hat, pilot_signals):
+    def _compute_bf_vector(self, theta):
+        c = scipy.constants.c
         
-        # Take h_hat, equalize it, apply it on r = G_b(hx + n) + d pilot, and see if you got the right
-        # pilot
-        df = pd.DataFrame()
-        df['r'] = pilot_signals['r_I'] + 1j * pilot_signals['r_Q']
+        wavelength = c / self.f_c
         
-        # 6) Equalization (in digital domain))
-        if (self.equalizer == 'ZF'):
-            w = h_hat / (np.conj(h_hat) * h_hat)
-        elif (self.equalizer == 'MMSE'):
-            noise_power = 10 ** (-self.SNR / 10.)
-            w = h_hat / (noise_power + np.conj(h_hat) * h_hat)
-        elif (self.equalizer == 'Matched'):
-            w = h_hat / np.abs(h_hat)
+        d = wavelength / 2. # antenna spacing 
+        k = 2. * scipy.constants.pi / wavelength
+    
+        exponent = 1j * k * d * math.cos(theta) * np.arange(self.M_ULA)
+        
+        f = 1. / math.sqrt(self.M_ULA) * np.exp(exponent)
+        
+        # Test the norm square... is it equal to unity? YES.
+    #    norm_f_sq = LA.norm(f, ord=2) ** 2
+     #   print(norm_f_sq)
+    
+        return f
+
+    def _compute_channel(self, x_ue, y_ue, x_bs, y_bs):
+        # Np is the number of paths p
+        PLE_L = 2
+        PLE_N = 4
+        G_ant = 3 # dBi for beamforming mmWave antennas
+        
+        # Override the antenna gain if no beamforming
+        if self.use_beamforming == False:
+            G_ant = self.G_ant_no_beamforming
+            
+        # theta is the steering angle.  Sampled iid from unif(0,pi).
+        theta = self.np_random.uniform(low=0, high=scipy.constants.pi, size=self.Np)
+    
+        is_mmWave = (self.f_c > 25e9)
+        
+        if is_mmWave:
+            path_loss_LOS = 10 ** (self._path_loss_mmWave(x_ue, y_ue, PLE_L, x_bs, y_bs) / 10.)
+            path_loss_NLOS = 10 ** (self._path_loss_mmWave(x_ue, y_ue, PLE_N, x_bs, y_bs) / 10.)
         else:
-            w = 1.
-    
-        x_hat_l = np.conj(w) * df['r']
-        
-        # Equalized quantized received signal
-        df['x_hat_I'] = np.real(x_hat_l)
-        df['x_hat_Q'] = np.imag(x_hat_l)
-        
-        print('Entering Bussgang decomposition')        
-        #G_b, d, e = bussgang_decomposition(df, b)
-        print('Leaving Bussgang decomposition')
-    
-        return 0
-
-    
-    def generate_pilot_signals(self, N, T, SNR, shuffle=False):
-        noise_power = 10 ** (-SNR / 10.)
-        df = self.compute_received_PSK_data(noise_power)
-        Np = int(T*df.shape[0])
-        
-#        symbol_power = np.mean(df['x_I'] ** 2 + df['x_Q'] ** 2)
-        
-        X_pilot = df.groupby('m').apply(lambda x: x.loc[np.random.choice(x.index, Np//self.M, replace=False), :])
-        X_pilot.index = X_pilot.index.droplevel('m')
-        X_operational = df[~df.index.isin(X_pilot.index)].reset_index(drop=True)
-        
-        X_pilot = X_pilot.reset_index(drop=True)
-        
-        if shuffle:
-            X_pilot = X_pilot.sample(frac=1, random_state=self.random_state)
-            X_operational = X_operational.sample(frac=1, random_state=self.random_state)
+            path_loss_LOS = 10 ** (self._path_loss_sub6(x_ue, y_ue, x_bs, y_bs) / 10.)
+            path_loss_NLOS = 10 ** (self._path_loss_sub6(x_ue, y_ue, x_bs, y_bs) / 10.)
             
-        assert(X_pilot.shape[0] + X_operational.shape[0] == df.shape[0])
+        # Bernoulli for p
+        alpha = np.zeros(self.Np, dtype=complex)
+        p = self.np_random.binomial(1, self.prob_LOS)
+        
+        if (p == 1):
+            self.Np = 1
+            alpha[0] = 1. / math.sqrt(path_loss_LOS)
+        else:
+            ## just changed alpha to be complex in the case of NLOS
+            alpha = (self.np_random.normal(size=self.Np) + 1j * self.np_random.normal(size=self.Np)) / math.sqrt(path_loss_NLOS)
+                
+        rho = 1. * 10 ** (G_ant / 10.)
+        
+        # initialize the channel as a complex variable.
+        h = np.zeros(self.M_ULA, dtype=complex)
+        
+        for p in np.arange(self.Np):
+            a_theta = self._compute_bf_vector(theta[p])
+            h += alpha[p] / rho * a_theta.T # scalar multiplication into a vector
+        
+        h *= math.sqrt(self.M_ULA)
+        return h
 
-        return X_pilot, X_operational    
-    
-    
-    def _compute_centroids_PSK(self):
-        # This function computes the centroids which is the 
-        # essence of the coherent detection
-        # This function is correct
+    def _compute_rf(self, x_ue, y_ue, pt_bs1):
+        T = 290 # Kelvins
+        B = 15000 # Hz
+        k_Boltzmann = 1.38e-23
         
-        M = self.M
-        # This is the transmitted data
-        centroids = pd.DataFrame(columns=['m', 'x_I', 'x_Q'])
-    
-        for m in np.arange(M):
-            centroids = centroids.append({'m': m,
-                                          'x_I': np.sqrt(1 / 2) * np.cos(2*np.pi/M*m + np.pi/M),
-                                          'x_Q': np.sqrt(1 / 2) * np.sin(2*np.pi/M*m + np.pi/M)},
-                                          ignore_index=True)
-        
-        # Normalize the transmitted symbols
-        signal_power = np.mean(centroids['x_I'] ** 2 + centroids['x_Q'] ** 2)
-        centroids.iloc[:, 1:] /= np.sqrt(signal_power)
-        
-        centroids.loc[:, 'm'] = centroids.loc[:, 'm'].astype(int)
-        
-        return centroids
+        noise_power = k_Boltzmann*T*B # this is in Watts
 
+        # Without loss of generality, the base station is at the origin
+        # The interfering base station is x = cell_radius, y = 0
+        x_bs_1, y_bs_1 = self.x_bs_1, self.y_bs_1
 
-    def compute_received_PSK_data(self, noise_power):
-        c = 3e8
-        centroids = self._compute_centroids_PSK()
-        
-        t_C = c / (self.v * self.f_c)
-        S_0 = 1e-3
-        sc_spacing_0 = 15e3
+        # Now the channel h, which is a vector in beamforming.
+        # This computes the channel for user in serving BS from the serving BS.
+        h_1 = self._compute_channel(x_ue, y_ue, x_bs=x_bs_1, y_bs=y_bs_1) 
+          
+        # if this is not beamforming, there is no precoder:
+        if (self.use_beamforming):
+            received_power = pt_bs1 * abs(np.dot(h_1.conj(), self.F[:, self.f_n_bs1])) ** 2
+        else: # the gain is ||h||^2
+            received_power = pt_bs1 * LA.norm(h_1, ord=2) ** 2
+                
+        # TODO: interference power can be a sporadic signal with a bernoulli dist.
+        interference_power = self.np_random.binomial(1, self.p_interference) * 1 # in Watts
+        interference_plus_noise_power = interference_power + noise_power
+        received_sinr = 10*np.log10(received_power / interference_plus_noise_power)
 
-        T_S = t_C / S_0 * self.sc_spacing / sc_spacing_0 # number of subframes available in coherence time
-            
-        number_of_subframes = np.ceil(self.N / self.symbols_per_subframe).astype(int)
+        return [np.round(received_power, 2), np.round(received_sinr, 2)]
     
-        print(f'{self.N} QPSK symbols correspond to {number_of_subframes} subframes (T_S = {T_S} subframes).')
+    # https://ieeexplore-ieee-org.ezproxy.lib.utexas.edu/stamp/stamp.jsp?tp=&arnumber=7522613
+    def _path_loss_mmWave(self, x, y, PLE, x_bs=0, y_bs=0):
+        # These are the parameters for f = 28000 MHz.
+        wavelength = self.c / self.f_c
+        A = 0.0671
+        Nr = self.M_ULA
+        sigma_sf = 9.1
+        #PLE = 3.812
         
-        # 1) Data generator in baseband: x_l using QPSK reference symbols
-        df = pd.DataFrame(np.tile(centroids.values, self.N // self.M).reshape(-1, centroids.shape[1]))
-        df.columns = centroids.columns
-        df['m'] = df['m'].astype(int)
+        d = math.sqrt((x - x_bs)**2 + (y - y_bs)**2) # in meters
         
-        # 2) Channel
-        h_I, h_Q = self.true_h
-        h = h_I + 1j * h_Q
-        
-        x_l = df['x_I'] + 1j * df['x_Q']
-        y_l = h * x_l
+        fspl = 10 * np.log10(((4*scipy.constants.pi*d) / wavelength) ** 2)
+        pl = fspl + 10 * np.log10(d ** PLE) * (1 - A*np.log2(Nr))
     
-        # Obtain the signal prior to the additive noise introduction
-        # This step spreads the channel value across the OFDM symbol
-        # That is, the channel appears constant across N QPSK symbols, but changes
-        # every coherence time
-        df['h_I'] = np.kron(np.real(h), np.ones(self.N))
-        df['h_Q'] = np.kron(np.imag(h), np.ones(self.N))
-        
-        df['hx_I'] = np.real(y_l)
-        df['hx_Q'] = np.imag(y_l)
-        
-        noise = np.random.normal(0, np.sqrt(noise_power/2.), size=x_l.shape) + \
-            1j * np.random.normal(0, np.sqrt(noise_power/2.), size=x_l.shape) 
-        y_l += noise # y = hx + n
+        chi_sigma = self.np_random.normal(0, sigma_sf) # log-normal shadowing 
+        L = pl + chi_sigma
     
-        # Now obtain the signal from the branches
-        y_I = np.real(y_l)
-        y_Q = np.imag(y_l)
+        return L # in dB    
         
-        # The received signal before quantization
-        df['y_I'] = y_I
-        df['y_Q'] = y_Q
-            
-        # Compute noise statistics
-        df.loc[:, 'n_I'] = df.loc[:, 'y_I'] - df.loc[:, 'hx_I']
-        df.loc[:, 'n_Q'] = df.loc[:, 'y_Q'] - df.loc[:, 'hx_Q']
+    def _path_loss_sub6(self, x, y, x_bs=0, y_bs=0):
+        f_c = self.f_c
         
-        # 4) Quantize data per branch onto r_l
-        if (self.b < np.inf):
-            #r_I_quant = bbit_adc_quantization(y_I, b=b, max_iteration=100)
-            #r_Q_quant = bbit_adc_quantization(y_Q, b=b, max_iteration=100)
-            #r_l = r_I_quant + 1j * r_Q_quant
-            #r_l = r_l.values.flatten()
-            
-            # The quantized received signal
-            #df['r_I'] = np.real(r_l)
-            #df['r_Q'] = np.imag(r_l)
-            True
-        else:  
-            #  full resolution, no need for quantization.
-            df['r_I'] = df['y_I'] 
-            df['r_Q'] = df['y_Q']
-  
+        d = math.sqrt((x - x_bs)**2 + (y - y_bs)**2)
+        h_B = 20
+        h_R = 1.5
+
+#        print('Distance from cell site is: {} km'.format(d/1000.))
+        # FSPL
+        L_fspl = -10*np.log10((4.*scipy.constants.pi*self.c/f_c / d) ** 2)
+        
+        # COST231        
+        C = 3
+        a = (1.1 * np.log10(f_c/1e6) - 0.7)*h_R - (1.56*np.log10(f_c/1e6) - 0.8)
+        L_cost231  = 46.3 + 33.9 * np.log10(f_c/1e6) + 13.82 * np.log10(h_B) - a + (44.9 - 6.55 * np.log10(h_B)) * np.log10(d/1000.) + C
     
-        return df
+        L = L_cost231
+        
+        return L # in dB
