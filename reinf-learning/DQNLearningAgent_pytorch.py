@@ -19,7 +19,7 @@ class DQNLearningAgent:
     def __init__(self, learning_rate=0.05,
                  discount_factor=0.995,
                  exploration_rate=1.0,
-                 exploration_decay_rate=0.92, batch_size=16,
+                 exploration_decay_rate=0.99, batch_size=32,
                  state_size=4, action_size=4, random_state=None):
 
         self.learning_rate = learning_rate          # alpha

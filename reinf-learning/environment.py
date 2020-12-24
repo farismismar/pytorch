@@ -87,7 +87,7 @@ class radio_environment(gym.Env):
         # for Reinforcement Learning
         self.step_count = 0
         self.reward_min = -5
-        self.reward_max = 20
+        self.reward_max = 10
         
         bounds_lower = np.array([
             -self.cell_radius,
