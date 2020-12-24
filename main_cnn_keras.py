@@ -66,9 +66,9 @@ def create_mlp():
     model = keras.Sequential(
         [
             keras.Input(shape=input_dim),
-            layers.Conv2D(filter_1_dim, kernel_size=(3, 3), padding='valid', activation="relu", kernel_initializer=initializer,  bias_initializer=initializer),
+            layers.Conv2D(filter_1_dim, kernel_size=(3, 3), padding='valid', activation="relu", kernel_initializer=initializer, bias_initializer='zeros'),
             layers.MaxPooling2D(pool_size=(2, 2)),
-            layers.Conv2D(filter_2_dim, kernel_size=(3, 3), padding='valid', activation="relu", kernel_initializer=initializer,  bias_initializer=initializer),
+            layers.Conv2D(filter_2_dim, kernel_size=(3, 3), padding='valid', activation="relu", kernel_initializer=initializer, bias_initializer='zeros'),
             layers.MaxPooling2D(pool_size=(2, 2)),
             layers.Flatten(),
             layers.Dropout(rate=0.2, seed=seed),
