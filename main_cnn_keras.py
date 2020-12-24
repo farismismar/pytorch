@@ -60,6 +60,7 @@ def create_mlp():
     input_dim_1d = np.prod(input_dim)
     
     # Uniform initializer for weight and bias
+    # TODO: This needs to be unified -1, 1 with PyTorch
     initializer = initializers.RandomUniform(minval=-1, maxval=1, seed=seed)
      
     model = keras.Sequential(
@@ -75,7 +76,7 @@ def create_mlp():
             layers.Dropout(rate=0.2, seed=seed),
             layers.Dense(input_dim_1d, use_bias=True, activation='relu'),
             layers.Dropout(rate=0.2, seed=seed),
-            layers.Dense(output_dim, use_bias=True, activation="softmax")            
+            layers.Dense(output_dim, use_bias=True, activation='softmax')
         ]
     )
         
@@ -99,23 +100,20 @@ print('Training time: {:.2f} mins.'.format((end_time - start_time) / 60.))
 
 # Plot the losses vs epoch here
 fig = plt.figure(figsize=(8, 5))
-plt.clf()
-plt.plot(history.epoch, history.history['loss'], marker='o', color='blue')
-plt.xlabel('Epoch')
-plt.ylabel('Loss')
-plt.title('Training Performance')
-plt.grid(True)
-plt.tight_layout()
-plt.show()
-plt.close(fig)
+    
+plot1, = plt.plot(history.epoch, history.history['loss'], c='blue')
+plt.grid(which='both', linestyle='--')
 
-fig = plt.figure(figsize=(8, 5))
-plt.clf()
-plt.plot(history.epoch, history.history['accuracy'], color='blue')
-plt.xlabel('Epoch')
-plt.ylabel('Accuracy [%]')
-plt.title('Training Performance')
-plt.grid(True)
+ax = fig.gca()    
+ax_sec = ax.twinx()
+plot2, = ax_sec.plot(history.epoch, history.history['accuracy'], lw=2, c='red')       
+ax.set_xlabel(r'Epoch')
+ax.set_ylabel(r'Loss')
+ax_sec.set_ylabel(r'Accuracy [%]')
+plt.legend([plot1, plot2], [r'Loss', r'Accuracy [%]'],
+           bbox_to_anchor=(0.1, 0.0, 0.80, 1), bbox_transform=fig.transFigure, 
+           loc='lower center', ncol=3, mode="expand", borderaxespad=0.)
+
 plt.tight_layout()
 plt.show()
 plt.close(fig)
