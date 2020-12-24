@@ -58,8 +58,6 @@ class DQNLearningAgent:
         # Keep adding depth until the losses start to subside (from explosive) while Q increases.
         hidden_dim = 8
         
-        alpha = 1. / np.sqrt(hidden_dim) 
-        
         model = torch.nn.Sequential(
              nn.Linear(self.state_size, hidden_dim, bias=True),
              nn.ReLU(),
@@ -75,20 +73,13 @@ class DQNLearningAgent:
              nn.ReLU(),
              nn.Linear(hidden_dim, self.action_size, bias=True),
         ).to(self.device)
-        
-        # Not sure if this is governed by the random_state
-        # nn.init.uniform_(model[0].weight, a=-alpha, b=alpha)
-        # nn.init.constant_(model[0].bias, 0)
-        # nn.init.uniform_(model[2].weight, a=-alpha, b=alpha)
-        # nn.init.constant_(model[2].bias, 0)        
-        # nn.init.uniform_(model[4].weight, a=-alpha, b=alpha)
-        # nn.init.constant_(model[4].bias, 0)
-        
+
+        # Initialize weights and biases        
         model.apply(self._initialize_model)
         
         # GD with adaptive moments
         optimizer = torch.optim.Adam(model.parameters(), lr=self.learning_rate)
-        criterion = nn.MSELoss()
+        criterion = nn.MSELoss(reduction='mean')
 
         return model, optimizer, criterion
     
@@ -201,11 +192,10 @@ class DQNLearningAgent:
 
         # Training
         history = {'epoch': [], 'loss': [], 'score': []}
-        
+  
         for epoch in np.arange(epochs):
             self.model.train()
-            epoch_loss = 0
-
+            
             # Working on a minibatch (to introduce Stochastic GD)            
             data, target = X.to(self.device), y.to(self.device)
                     
@@ -215,7 +205,7 @@ class DQNLearningAgent:
             loss.backward() # backward propagation
             self.optimizer.step() # update optimizer
             
-            epoch_loss += self.batch_size * loss.item() # since loss reduction is by mean
+            epoch_loss = loss.item()
             
             if verbose > 0:
                 print('Train Epoch: \tLoss: {:.2f}'.format(loss.item()))
