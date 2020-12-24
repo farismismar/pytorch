@@ -65,16 +65,26 @@ class DQNLearningAgent:
              nn.ReLU(),
              nn.Linear(hidden_dim, hidden_dim, bias=True),
              nn.ReLU(),
+             nn.Linear(hidden_dim, hidden_dim, bias=True),
+             nn.ReLU(),
+             nn.Linear(hidden_dim, hidden_dim, bias=True),
+             nn.ReLU(),
+             nn.Linear(hidden_dim, hidden_dim, bias=True),
+             nn.ReLU(),
+             nn.Linear(hidden_dim, hidden_dim, bias=True),
+             nn.ReLU(),
              nn.Linear(hidden_dim, self.action_size, bias=True),
         ).to(self.device)
         
         # Not sure if this is governed by the random_state
-        nn.init.uniform_(model[0].weight, a=-alpha, b=alpha)
-        nn.init.constant_(model[0].bias, 0)
-        nn.init.uniform_(model[2].weight, a=-alpha, b=alpha)
-        nn.init.constant_(model[2].bias, 0)        
-        nn.init.uniform_(model[4].weight, a=-alpha, b=alpha)
-        nn.init.constant_(model[4].bias, 0)    
+        # nn.init.uniform_(model[0].weight, a=-alpha, b=alpha)
+        # nn.init.constant_(model[0].bias, 0)
+        # nn.init.uniform_(model[2].weight, a=-alpha, b=alpha)
+        # nn.init.constant_(model[2].bias, 0)        
+        # nn.init.uniform_(model[4].weight, a=-alpha, b=alpha)
+        # nn.init.constant_(model[4].bias, 0)
+        
+        model.apply(self._initialize_model)
         
         # GD with adaptive moments
         optimizer = torch.optim.Adam(model.parameters(), lr=self.learning_rate)
@@ -83,6 +93,18 @@ class DQNLearningAgent:
         return model, optimizer, criterion
     
     
+    def _initialize_model(self, m):
+        classname = m.__class__.__name__
+        
+        # If the model is linear, initailize its weights
+        if classname.find('Linear') != -1:
+            # get the number of the inputs
+            n = m.in_features
+            alpha = 1. / np.sqrt(n)
+            m.weight.data.uniform_(-alpha, alpha)
+            m.bias.data.fill_(0.)
+            
+            
     def _construct_training_set(self, replay):
         # Select states and next states from replay memory
         # state, action, reward, new_state, done
