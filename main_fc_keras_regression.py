@@ -10,12 +10,14 @@ import os
 from tensorflow import keras
 from tensorflow.keras import layers, initializers
 from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
+from tensorflow.keras.wrappers.scikit_learn import KerasRegressor
 from tensorflow.compat.v1 import set_random_seed
 
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
+
+from sklearn.preprocessing import MinMaxScaler
 
 import time
 
@@ -25,10 +27,10 @@ momentum = 0.5
 batch_size = 4
 prefer_gpu = True
 
-input_dim = 28 ** 2 # MNIST input size
+input_dim = None
 hidden_1_dim = 32
 hidden_2_dim = 32
-output_dim = 10
+output_dim = 1
 
 os.chdir('/Users/farismismar/Desktop')
 
@@ -41,18 +43,28 @@ set_random_seed(seed)
 np.random.seed(seed)
 
 # Load MNIST as Numpy arrays
-(X_train, y_train), (X_test, y_test) = keras.datasets.mnist.load_data()
+(X_train, y_train), (X_test, y_test) = tf.keras.datasets.boston_housing.load_data(
+    path="boston_housing.npz", test_split=0.2, seed=seed)
 # Note: If this fails due to certificate verify failure, sudo -H pip3 install --upgrade certifi
 
-# Must normalize the data for Keras in [0,1]---not required for PyTorch
-X_train = X_train.astype("float32") / 255.
-X_test = X_test.astype("float32") / 255.
+
+def _scale_data(X_train, X_test):
+    ss = MinMaxScaler()
+    X_train_ = ss.fit_transform(X_train)
+    X_test_ = ss.transform(X_test)
+    
+    return X_train_, X_test_
+
 
 X_train = X_train.reshape(X_train.shape[0], -1) # reshape
 X_test = X_test.reshape(X_test.shape[0], -1) # reshape
 
+X_train, X_test = _scale_data(X_train, X_test)
 
-def create_mlp():
+input_dim = X_train.shape[1]
+
+   
+def _create_mlp():
     global seed, input_dim, hidden_1_dim, hidden_2_dim, output_dim
     
     # Uniform initializer for weight and bias
@@ -70,21 +82,20 @@ def create_mlp():
             keras.Input(shape=input_dim),
             layers.Dense(hidden_1_dim, use_bias=True, activation="relu", kernel_initializer=initializer_1, bias_initializer='zeros'),
             layers.Dense(hidden_2_dim, use_bias=True, activation="relu", kernel_initializer=initializer_2, bias_initializer='zeros'),
-            layers.Dense(output_dim, use_bias=True, activation="softmax", kernel_initializer=initializer_3, bias_initializer='zeros')
-            
+            layers.Dense(output_dim, use_bias=True, activation="linear", kernel_initializer=initializer_3, bias_initializer='zeros')
         ]
     )
         
-    model.compile(loss='sparse_categorical_crossentropy', 
-                  optimizer=keras.optimizers.SGD(learning_rate=learning_rate, momentum=momentum), 
-                  metrics=['accuracy', 'sparse_categorical_crossentropy'])
+    model.compile(loss='mean_absolute_error', 
+                  optimizer=keras.optimizers.SGD(learning_rate=learning_rate, momentum=momentum))
     
     return model
 
-# Early stopping condition
-es = EarlyStopping(monitor='accuracy', mode='auto', verbose=1, min_delta=0.0001, patience=4)
 
-model = KerasClassifier(build_fn=create_mlp, verbose=1, callbacks=es,
+# Early stopping condition
+es = EarlyStopping(monitor='loss', mode='auto', verbose=1, min_delta=0.0001, patience=4)
+
+model = KerasRegressor(build_fn=_create_mlp, verbose=1, callbacks=es,
                          epochs=n_epochs, batch_size=batch_size)
 start_time = time.time()
 with tf.device(device):
@@ -96,17 +107,13 @@ print('Training time: {:.2f} mins.'.format((end_time - start_time) / 60.))
 # Plot the losses vs epoch here
 fig = plt.figure(figsize=(8, 5))
     
-plot1, = plt.plot(history.epoch, history.history['loss'], c='blue')
+plot1, = plt.plot(history.epoch, history.history['loss'], c='blue', label='MAE')
 plt.grid(which='both', linestyle='--')
 
 ax = fig.gca()    
-ax_sec = ax.twinx()
-plot2, = ax_sec.plot(history.epoch, history.history['accuracy'], lw=2, c='red')       
 ax.set_xlabel(r'Epoch')
 ax.set_ylabel(r'Loss')
-ax_sec.set_ylabel(r'Accuracy [%]')
-plt.legend([plot1, plot2], [r'Loss', r'Accuracy [%]'],
-           bbox_to_anchor=(0.1, 0.0, 0.80, 1), bbox_transform=fig.transFigure, 
+plt.legend(bbox_to_anchor=(0.1, 0.0, 0.80, 1), bbox_transform=fig.transFigure, 
            loc='lower center', ncol=3, mode="expand", borderaxespad=0.)
 
 plt.tight_layout()
@@ -116,12 +123,12 @@ plt.close(fig)
 # Testing
 with tf.device(device):
     y_pred = model.predict(X_test)
-    loss, acc, _ = model.model.evaluate(X_test, y_test)
+    loss = model.model.evaluate(X_test, y_test)
     
-print('Test: Loss {:.4f}, Acc: {:.4f}'.format(loss, acc))
+print('Test: Loss {:.4f}'.format(loss))
 
 # Scoring
-accuracy = (y_test == y_pred).sum() / y_test.shape[0]
+mse = ((y_test - y_pred) ** 2).sum() / y_test.shape[0]
 
 # Reporting the number of parameters
 num_params = model.model.count_params()

@@ -59,8 +59,7 @@ def create_mlp():
     # Convert the tuple into a single number
     input_dim_1d = np.prod(input_dim)
     
-    # Uniform initializer for weight and bias
-    # TODO: This needs to be unified -1, 1 with PyTorch
+    # Uniform initializer for weight
     initializer = initializers.RandomUniform(minval=-1, maxval=1, seed=seed)
      
     model = keras.Sequential(
@@ -124,6 +123,9 @@ with tf.device(device):
     loss, acc, _ = model.model.evaluate(X_test, y_test)
     
 print('Test: Loss {:.4f}, Acc: {:.4f}'.format(loss, acc))
+
+# Scoring
+accuracy = (y_test == y_pred).sum() / y_test.shape[0]
 
 # Reporting the number of parameters
 num_params = model.model.count_params()

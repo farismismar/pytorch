@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Nov 25 21:43:37 2020
+Created on Sun Nov 22 08:56:31 2020
 
 @author: farismismar
 """
@@ -16,18 +16,18 @@ import matplotlib.pyplot as plt
 
 import time
 
-n_epochs = 15
+n_epochs = 100
 learning_rate = 0.01
 momentum = 0.5
-batch_size = 64
+batch_size = 4
 prefer_gpu = True
 
-input_dim = (28, 28, 1) # MNIST input size
-filter_1_dim = 32
-filter_2_dim = 64
-output_dim = 10
+loss_threshold = 200
 
-accuracy_threshold = 0.99
+input_dim = 28 ** 2
+hidden_1_dim = 32
+hidden_2_dim = 32
+output_dim = 10
 
 os.chdir('/Users/farismismar/Desktop')
 
@@ -53,8 +53,8 @@ def _initialize_model(m):
         m.weight.data.uniform_(-alpha, alpha)
         m.bias.data.fill_(0.)
 
-        
-# Load MNIST using Torchvision
+
+# Load MNIST using Torchvision (clearly the target variable must be continuous)
 train_loader = torch.utils.data.DataLoader(
     torchvision.datasets.MNIST('./files/', train=True, download=True, 
                                transform=torchvision.transforms.Compose([
@@ -69,46 +69,24 @@ test_loader = torch.utils.data.DataLoader(
                                torchvision.transforms.Normalize((0.1307,), (0.3081,))
                                ])), batch_size=batch_size, shuffle=True)
 
-# This is torch.Size([64, 1, 28, 28])
-# What is 32 * 7 * 7 exactly?
-# Formula given two tensors and a Conv2d layer
-# https://pytorch.org/docs/master/generated/torch.nn.Conv2d.html#torch.nn.Conv2d
-# https://pytorch.org/docs/master/generated/torch.nn.MaxPool2d.html#torch.nn.MaxPool2d
-# An easier way is to create a submodel up to nn.Flatten() and check the shape:
-# submodel(data).shape
-
-# Convert the tuple into a single number
-input_dim_1d = np.prod(input_dim)
-
+# Construct the DNN 
 model = torch.nn.Sequential(
-            # Features
-            nn.Conv2d(in_channels=1, out_channels=filter_1_dim, kernel_size=3, padding=1, bias=True),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
-            nn.Conv2d(in_channels=filter_1_dim, out_channels=filter_2_dim, kernel_size=3, padding=1, bias=True),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
-            nn.Flatten(),
-            # Classification
-            nn.Dropout(p=0.2),
-            nn.Linear(filter_2_dim * 7 * 7, input_dim_1d), # 64, 1, 28, 28 becomes 64, 32, 7, 7
-            nn.ReLU(),
-            nn.Dropout(p=0.2),
-            nn.Linear(input_dim_1d, input_dim_1d, bias=True),
-            nn.ReLU(),
-            nn.Linear(input_dim_1d, output_dim, bias=True),
-            nn.Softmax(dim=1)
+         nn.Linear(input_dim, hidden_1_dim, bias=True),
+         nn.ReLU(),
+         nn.Linear(hidden_1_dim, hidden_2_dim, bias=True),
+         nn.ReLU(),
+         nn.Linear(hidden_1_dim, output_dim, bias=True),
         ).to(device)
 
 # Initialize weights and biases        
 model.apply(_initialize_model)
-
+          
 # GD with adaptive moments
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
 criterion = nn.CrossEntropyLoss()
 
 # Training
-history = {'epoch': [], 'loss': [], 'accuracy': []}
+history = {'epoch': [], 'loss': []}
 
 start_time = time.time()
 for epoch in np.arange(n_epochs):
@@ -118,35 +96,25 @@ for epoch in np.arange(n_epochs):
     # Iterate on batches to introduce Stochastic GD
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
+        data = data.view(data.shape[0], -1) # reshape
 
-        # TODO: Image augmentation for data
-    
         optimizer.zero_grad() # minimize
-        output = model.forward(data)
+        output = model.forward(data) # a prediction
         loss = criterion(output, target)
         loss.backward() # backward propagation
         optimizer.step() # update optimizer
         
         epoch_loss += batch_size * loss.item() # since loss reduction is by mean
         
-        # accuracy
-        pred = output.argmax(dim=1, keepdim=True)  # get the index of the max probability
-        correct_train += pred.eq(target.view_as(pred)).sum().item()
-        total_train += target.nelement()
-        train_accuracy = correct_train / total_train
-        
-        if batch_idx % 100 == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.2f},\tAcc: {:.4f}'.format(
-                epoch, batch_idx, len(train_loader),
-                100. * batch_idx / len(train_loader), loss.item(), train_accuracy))
+        if batch_idx % 50 == 0:
+            print(f'Train Epoch: {epoch} [{batch_idx}/{len(train_loader)} ', end='')
+            print('({:.0f}%)]\tLoss: {:.2f}'.format(100. * batch_idx / len(train_loader), loss.item()))
         
     # Update the information for the training losses
-    accuracy_ = correct_train / total_train
     history['epoch'].append(epoch)
     history['loss'].append(epoch_loss / len(train_loader.dataset))
-    history['accuracy'].append(accuracy_)
     
-    if (accuracy_ >= accuracy_threshold):
+    if (epoch_loss <= loss_threshold):
         print('Target accuracy reached at current epoch.  Stopping.')
         break
 
@@ -155,20 +123,15 @@ end_time = time.time()
 print('Training time: {:.2f} mins.'.format((end_time - start_time) / 60.))
 
 # Plot the losses vs epoch here
-# Plot the losses vs epoch here
 fig = plt.figure(figsize=(8, 5))
     
-plot1, = plt.plot(history['epoch'], history['loss'], c='blue')
+plot1, = plt.plot(history['epoch'], history['loss'], c='blue', label='MAE')
 plt.grid(which='both', linestyle='--')
 
 ax = fig.gca()    
-ax_sec = ax.twinx()
-plot2, = ax_sec.plot(history['epoch'], history['accuracy'], lw=2, c='red')       
 ax.set_xlabel(r'Epoch')
 ax.set_ylabel(r'Loss')
-ax_sec.set_ylabel(r'Accuracy [%]')
-plt.legend([plot1, plot2], [r'Loss', r'Accuracy [%]'],
-           bbox_to_anchor=(0.1, 0.0, 0.80, 1), bbox_transform=fig.transFigure, 
+plt.legend(bbox_to_anchor=(0.1, 0.0, 0.80, 1), bbox_transform=fig.transFigure, 
            loc='lower center', ncol=3, mode="expand", borderaxespad=0.)
 
 plt.tight_layout()
@@ -178,32 +141,26 @@ plt.close(fig)
 # Testing
 model.eval()
 test_loss = 0
-correct_test = 0
 y_pred = torch.tensor(())
 with torch.no_grad():
     for batch_idx, (data, target) in enumerate(test_loader):
         data, target = data.to(device), target.to(device)
+        data = data.view(data.shape[0], -1)
         output = model.forward(data)
         y_pred = torch.cat((y_pred, output), 0)
         loss = criterion(output, target)
         test_loss += batch_size * loss.item()
-        
-        # accuracy
-        pred = output.argmax(dim=1, keepdim=True)  # get the index of the max probability
-        correct_test += pred.eq(target.view_as(pred)).sum().item()
 
     test_loss /= len(test_loader.dataset)
 
-    print('\nTest: Loss: {:.4f}, Acc: {:.4f}'.format(
-        test_loss, correct_test / len(test_loader.dataset)))
-
+    print('\nTest: Loss: {:.4f}'.format(test_loss))
 
 # Predictions
 y_true = test_loader.dataset.targets.view(-1, 1).detach().numpy()
 y_pred = y_pred.argmax(dim=1, keepdim=True).detach().numpy()
  
 # Scoring
-accuracy = (y_true == y_pred).sum() / y_true.shape[0]
+mse = ((y_true - y_pred) ** 2).sum() / y_true.shape[0]
 
 # Reporting the number of parameters
 num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)

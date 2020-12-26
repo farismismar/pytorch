@@ -173,6 +173,16 @@ with torch.no_grad():
     print('\nTest: Loss: {:.4f}, Acc: {:.4f}'.format(
         test_loss, correct_test / len(test_loader.dataset)))
 
+# Predictions
+X_test = test_loader.dataset.data
+y_true = test_loader.dataset.targets.detach().numpy()
+
+pred = model.forward(X_test.view(X_test.shape[0], -1).type(torch.FloatTensor))
+y_pred = pred.argmax(dim=1, keepdim=True).view(1, -1).detach().numpy()
+
+# Scoring
+accuracy = (y_true == y_pred).sum() / y_true.shape[0]
+
 # Reporting the number of parameters
 num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print('Number of parameters: {}'.format(num_params))
