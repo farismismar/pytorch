@@ -43,7 +43,7 @@ class DQNLearningAgent:
         # Add a few lines to caputre the seed for reproducibility.
         os.environ['PYTHONHASHSEED'] = '0'
         random.seed(random_state)
-        self.rng = np.random.RandomState(random_state)
+        self.np_random = np.random.RandomState(random_state)
         set_random_seed(random_state)
         
         self.use_cuda = len(tf.config.list_physical_devices('GPU')) > 0 and self.prefer_gpu
@@ -124,8 +124,8 @@ class DQNLearningAgent:
 
     def act(self, state, reward=None):
         # Exploration/exploitation: choose a random action or select the best one.
-        if np.random.uniform(0, 1) <= self.exploration_rate:
-            return self.rng.randint(0, self.action_size)
+        if self.np_random.uniform(0, 1) <= self.exploration_rate:
+            return self.np_random.randint(0, self.action_size)
        
         state = np.reshape(state, [1, self.state_size])
         #states = states[:,0]
