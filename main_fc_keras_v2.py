@@ -67,8 +67,8 @@ def create_mlp():
     
     model = keras.Sequential()
     model.add(layers.Dense(units=hidden_1_dim, input_dim=input_dim, use_bias=True, activation=activation, kernel_initializer='random_uniform', bias_initializer='zeros'))
-    model.add(layers.Dense(hidden_2_dim, use_bias=True, activation="relu", kernel_initializer=initializer_2, bias_initializer='zeros'))
-    model.add(layers.Dense(output_dim, use_bias=True, activation="softmax", kernel_initializer=initializer_3, bias_initializer='zeros'))
+    model.add(layers.Dense(units=hidden_2_dim, use_bias=True, activation="relu", kernel_initializer=initializer_2, bias_initializer='zeros'))
+    model.add(layers.Dense(units=output_dim, use_bias=True, activation="softmax", kernel_initializer=initializer_3, bias_initializer='zeros'))
 
     model.compile(loss='sparse_categorical_crossentropy', 
                   optimizer=keras.optimizers.SGD(learning_rate=learning_rate, momentum=momentum), 
