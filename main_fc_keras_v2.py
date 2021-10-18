@@ -66,7 +66,7 @@ def create_mlp():
     initializer_3 = initializers.RandomUniform(minval=-alpha, maxval=alpha, seed=seed)
     
     model = keras.Sequential()
-    model.add(layers.Dense(units=hidden_1_dim, input_dim=input_dim, use_bias=True, activation=activation, kernel_initializer='random_uniform', bias_initializer='zeros'))
+    model.add(layers.Dense(units=hidden_1_dim, input_dim=input_dim, use_bias=True, activation="relu", kernel_initializer='random_uniform', bias_initializer='zeros'))
     model.add(layers.Dense(units=hidden_2_dim, use_bias=True, activation="relu", kernel_initializer=initializer_2, bias_initializer='zeros'))
     model.add(layers.Dense(units=output_dim, use_bias=True, activation="softmax", kernel_initializer=initializer_3, bias_initializer='zeros'))
 
