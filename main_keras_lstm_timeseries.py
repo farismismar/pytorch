@@ -5,7 +5,6 @@ Created on Tue Mar 03 16:55:46 2020
 @author: farismismar
 """
 
-
 import os
 import pandas as pd
 
@@ -13,9 +12,8 @@ from tensorflow import keras
 from tensorflow.keras import layers, optimizers
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.compat.v1 import set_random_seed
-from sklearn import preprocessing
 
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 
 import glob
 import tensorflow as tf
@@ -29,7 +27,7 @@ import pdb
 class TimeSeriesClassifier:
     
     ver = '0.1'
-    rel_date = '2021-03-03'
+    rel_date = '2020-03-03'
     
     
     def __init__(self, prefer_gpu=True, seed=None):
@@ -81,7 +79,7 @@ class TimeSeriesClassifier:
         X_train = X.iloc[:train_rows, :]
         X_test = X.iloc[train_rows:(train_rows+test_offset), :]
         
-        le = preprocessing.LabelEncoder()
+        le = LabelEncoder()
         le.fit(y)
         encoded_y = le.transform(y)
         dummy_Y = keras.utils.to_categorical(encoded_y)
