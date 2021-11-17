@@ -24,8 +24,7 @@ import time
 import pdb
 
 
-class TimeSeriesClassifier:
-    
+class TimeSeriesClassifier:    
     ver = '0.1'
     rel_date = '2020-03-03'
     
@@ -134,7 +133,7 @@ class TimeSeriesClassifier:
 
         # Now, reshape input to be 3-D: [batch, timesteps, feature]
         # https://keras.io/api/layers/recurrent_layers/lstm/        
-        # This works because time_major is True, hence [timesteps, batch, feature]
+        # Because LSTM time_major is True, input shape becomes [timesteps, batch, feature]:
         X_train = np.reshape(X_train, (-1, lookahead + 1, X_train.shape[1] // (lookahead + 1)))
         X_test = np.reshape(X_test, (-1, lookahead + 1, X_test.shape[1] // (lookahead + 1)))
     
@@ -160,8 +159,6 @@ class TimeSeriesClassifier:
     def engineer_features(self, df, target_variable, future_lookahead=1):
     
         df_output = pd.DataFrame()
-    
-        df_ = df.drop(['MT'], axis=1, inplace=True)
         
         # Noting that column order is important
         # Preamble (time t) but without the target variable
@@ -173,8 +170,8 @@ class TimeSeriesClassifier:
         # Now, forecasts
         df_forecasts = []
         for i in 1 + np.arange(future_lookahead):
-            df_i = df_.shift(-i).add_suffix('_t+{}'.format(i*10))
-            df_diff = df_.diff(-i).add_suffix('_d+{}'.format(i*10))
+            df_i = df_.shift(-i).add_suffix('_t+{}'.format(i))
+            df_diff = df_.diff(-i).add_suffix('_d+{}'.format(i))
             
             # Get rid of all time shifts of the target variable
             # except for the future prediction
@@ -200,7 +197,7 @@ class TimeSeriesClassifier:
         # Drop the target column
         assert(df_output.isnull().sum().sum() == 0)
         
-        engineered_target_variable = f'{target_variable}_t+{10*future_lookahead}'
+        engineered_target_variable = f'{target_variable}_t+{future_lookahead}'
         
         return df_output, engineered_target_variable
     
@@ -225,7 +222,7 @@ class TimeSeriesClassifier:
         ax.set_ylabel(r'Loss')
         ax_sec.set_ylabel(r'Accuracy')
         plt.legend([plot1, plot2, plot3, plot4], [r'Training Loss', r'Validation Loss', r'Training Accuracy', r'Validation Accuracy'],
-                    bbox_to_anchor=(-0.1, -0.01, 1.20, 1), bbox_transform=fig.transFigure, 
+                    bbox_to_anchor=(-0.1, -0.1, 1.20, 1), bbox_transform=fig.transFigure, 
                     loc='lower center', ncol=4, mode="expand", borderaxespad=0.)
         
         plt.title(title)
@@ -238,8 +235,7 @@ class TimeSeriesClassifier:
     def run_simulation(self, df, lookahead_time, epoch_count=256, batch_size=16):
         # lookahead is the number of frames (i.e., 1 = 10 ms).  We are not doing more than 1
         label = 'target_variable'
-        df_1, engineered_label = self.engineer_features(df, 
-                        label, future_lookahead=lookahead_time)
+        df_1, engineered_label = self.engineer_features(df, label, future_lookahead=lookahead_time)
         
         X_train, X_test, Y_train, Y_test, le = self.train_test_split_time(df_1, engineered_label, time_steps=lookahead_time)
         
