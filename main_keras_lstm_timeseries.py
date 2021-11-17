@@ -194,7 +194,7 @@ class TimeSeriesClassifier:
         # Drop whatever is left.
         df_output.dropna(how='any', axis=1, inplace=True)
         
-        # Drop the target column
+        # No more NaNs past this point.
         assert(df_output.isnull().sum().sum() == 0)
         
         engineered_target_variable = f'{target_variable}_t+{future_lookahead}'
