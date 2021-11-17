@@ -36,14 +36,19 @@ class TimeSeriesClassifier:
         
         # Fix the seed to guarantee reproducibility
         self.seed = seed
-        self.np_random = np.random.RandomState(seed=seed)
-        set_random_seed(seed)
-        os.environ['PYTHONHASHSEED'] = str(seed)
+        self.reset_seed()
 
 
     def __ver__(self):
         return self.ver, self.rel_date
         
+    def reset_seed(self):
+        seed = self.seed
+        self.np_random = np.random.RandomState(seed=seed)
+        set_random_seed(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+        return self
+    
     
     def load_data(self):
         df = pd.DataFrame()
@@ -234,6 +239,8 @@ class TimeSeriesClassifier:
     
     def run_prediction(self, df, lookahead_time, train_size=0.7, epoch_count=256, batch_size=16):
         # lookahead is the number of frames (i.e., 1 = 10 ms).  We are not doing more than 1
+        predictor.reset_seed()
+        
         label = 'target_variable'
         df_1, engineered_label = self.engineer_features(df, label, future_lookahead=lookahead_time)
         
