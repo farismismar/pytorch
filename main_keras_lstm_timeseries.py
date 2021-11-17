@@ -65,7 +65,7 @@ class TimeSeriesClassifier:
         return df
     
 
-    def train_test_split_time(self, df, label, time_steps, train_size=0.7):
+    def train_test_split_time(self, df, label, time_steps, train_size):
         
         y = df[label]
         X = df.drop(label, axis=1)
@@ -160,7 +160,7 @@ class TimeSeriesClassifier:
     
         df_output = pd.DataFrame()
         
-        # Noting that column order is important
+        # Column order is important
         # Preamble (time t) but without the target variable
         df_preamble = df_.drop(target_variable, axis=1)
         df_zeros = pd.DataFrame(np.zeros_like(df_), columns=df_.columns).add_suffix('_d')
@@ -222,22 +222,22 @@ class TimeSeriesClassifier:
         ax.set_ylabel(r'Loss')
         ax_sec.set_ylabel(r'Accuracy')
         plt.legend([plot1, plot2, plot3, plot4], [r'Training Loss', r'Validation Loss', r'Training Accuracy', r'Validation Accuracy'],
-                    bbox_to_anchor=(-0.1, -0.1, 1.20, 1), bbox_transform=fig.transFigure, 
+                    bbox_to_anchor=(-0.1, -0.02, 1.20, 1), bbox_transform=fig.transFigure, 
                     loc='lower center', ncol=4, mode="expand", borderaxespad=0.)
         
         plt.title(title)
-        #plt.tight_layout()
+        plt.tight_layout()
         plt.savefig(f'{title}.png', dpi=fig.dpi)
         #plt.show()
         plt.close(fig)
         
     
-    def run_simulation(self, df, lookahead_time, epoch_count=256, batch_size=16):
+    def run_prediction(self, df, lookahead_time, train_size=0.7, epoch_count=256, batch_size=16):
         # lookahead is the number of frames (i.e., 1 = 10 ms).  We are not doing more than 1
         label = 'target_variable'
         df_1, engineered_label = self.engineer_features(df, label, future_lookahead=lookahead_time)
         
-        X_train, X_test, Y_train, Y_test, le = self.train_test_split_time(df_1, engineered_label, time_steps=lookahead_time)
+        X_train, X_test, Y_train, Y_test, le = self.train_test_split_time(df_1, engineered_label, time_steps=lookahead_time, train_size=train_size)
         
         history, model, Y_pred_nn = self.train_nn(X_train, X_test, Y_train, Y_test, 
                                             lookahead=lookahead_time,
@@ -261,10 +261,11 @@ class TimeSeriesClassifier:
 
   
 lookahead_time = 3 # how many featuresets are needed? (3 means 4)
+train_size = 0.2 
 predictor = TimeSeriesClassifier(seed=0)
 df = predictor.load_data()
 
 start_time = time.time()
-df_output = predictor.run_simulation(df, lookahead_time)
+df_output = predictor.run_prediction(df, lookahead_time, train_size)
 end_time = time.time()
-print("Full simulation run-time {:.3f} hours.".format((end_time - start_time) / 3600.))
+print("Total run time {:.3f} hours.".format((end_time - start_time) / 3600.))
