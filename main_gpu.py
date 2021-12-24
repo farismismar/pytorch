@@ -25,7 +25,7 @@ prefer_gpu = True
 seed = 0
 
 random.seed(seed)
-np_random = np.random.seed(seed)
+np_random = np.random.RandomState(seed)
 set_random_seed(seed)
 
 use_cuda = len(tf.config.list_physical_devices('GPU')) > 0 and prefer_gpu
