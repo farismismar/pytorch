@@ -160,49 +160,42 @@ class TimeSeriesClassifier:
         return history, model, Y_pred_test
     
     
-    # use this to build the time lookahead
-    def engineer_features(self, df, target_variable, future_lookahead=1):
-    
-        df_output = pd.DataFrame()
-        
-        # Column order is important
-        # Preamble (time t) but without the target variable
-        df_preamble = df_.drop(target_variable, axis=1)
-        df_zeros = pd.DataFrame(np.zeros_like(df_), columns=df_.columns).add_suffix('_d')
-        df_preamble = df_preamble.add_suffix('_t')
-        df_preamble = pd.concat([df_preamble, df_zeros], axis=1)
-        
-        # Now, forecasts
-        df_forecasts = []
-        for i in 1 + np.arange(future_lookahead):
-            df_i = df_.shift(-i).add_suffix('_t+{}'.format(i))
-            df_diff = df_.diff(-i).add_suffix('_d+{}'.format(i))
+    def engineer_features(self, df, target_variable, lookahead=2, lookbacks=3, dropna=False):
+        # use this to build the time lookahead
+        df_ = df.set_index('Time')
+        df_y = df_[target_variable].to_frame()
+      
+        df_postamble = df_.add_suffix('_t')
+        df_postamble = pd.concat([df_postamble, pd.DataFrame(np.zeros_like(df_), index=df_.index, columns=df_.columns).add_suffix('_d')], axis=1)
+                
+        df_shifted = pd.DataFrame()
+        # Noting that column order is important
+        for i in range(lookbacks, 0, -1):
+            df_shifted_i = df_.shift(i).add_suffix('_t-{}'.format(i))
+            df_diff_i = df_.diff(i).add_suffix('_d-{}'.format(i)) # difference with previous time
             
-            # Get rid of all time shifts of the target variable
-            # except for the future prediction
-            if i != future_lookahead:
-                df_i.drop(df_i.filter(regex=target_variable).columns, axis=1, inplace=True)                
-
-            df_i = pd.concat([df_i, df_diff], axis=1)
-            df_forecasts.append(df_i)
+            df_shifted = pd.concat([df_shifted, df_shifted_i, df_diff_i], axis=1)
     
-        # Add preamble to df_forecasts
-        df_ = df_preamble.join(df_forecasts, how='outer')
-        df_output = pd.concat([df_output, df_], axis=0, ignore_index=True)
+        df_y_shifted = df_y.shift(-lookahead).add_suffix('_t+{}'.format(lookahead))
+
+        df_output = pd.concat([df_shifted, df_postamble, df_y_shifted], axis=1)
         
-        # Do not drop data in a time series.  Instead, fill last value
-        df_output.fillna(method='bfill', inplace=True)
-        
-        # Then fill the first value!
-        df_output.fillna(method='ffill', inplace=True)
-        
-        # Drop whatever is left.
-        df_output.dropna(how='any', axis=1, inplace=True)
-        
-        # No more NaNs past this point.
+        if dropna:
+            df_output.dropna(inplace=True)
+        else:
+            # Do not drop data in a time series.  Instead, fill last value
+            df_output.fillna(method='bfill', inplace=True)
+           
+            # Then fill the first value!
+            df_output.fillna(method='ffill', inplace=True)
+           
+            # Drop whatever is left.
+            df_output.dropna(how='any', axis=1, inplace=True)
+       
+        # Whatever it is, no more nulls shall pass!
         assert(df_output.isnull().sum().sum() == 0)
-        
-        engineered_target_variable = f'{target_variable}_t+{future_lookahead}'
+    
+        engineered_target_variable = f'{target_variable}_t+{10*lookahead}'
         
         return df_output, engineered_target_variable
     
@@ -235,14 +228,14 @@ class TimeSeriesClassifier:
         plt.savefig(f'{title}.png', dpi=fig.dpi)
         #plt.show()
         plt.close(fig)
-        
+       
     
-    def run_prediction(self, df, lookahead_time, train_size=0.7, epoch_count=256, batch_size=16):
+    def run_prediction(self, df, lookahead_time, lookbacks_time, train_size=0.7, epoch_count=256, batch_size=16):
         # lookahead is the number of frames (i.e., 1 = 10 ms).  We are not doing more than 1
         predictor.reset_seed()
         
         label = 'target_variable'
-        df_1, engineered_label = self.engineer_features(df, label, future_lookahead=lookahead_time)
+        df_1, engineered_label = self.engineer_features(df, label, lookahead=lookahead_time, lookbacks=lookbacks_time)
         
         X_train, X_test, Y_train, Y_test, le = self.train_test_split_time(df_1, engineered_label, time_steps=lookahead_time, train_size=train_size)
         
@@ -267,12 +260,14 @@ class TimeSeriesClassifier:
         return df_output_        
 
   
-lookahead_time = 3 # how many featuresets are needed? (3 means 4)
+lookahead_time = 0 # which feature set is being predicted? y(t - k)
+lookbacks_time = 3 # use 3 previous feature sets (t-3, t-2, t-1, and t) to predict the feature set at t + 3
+
 train_size = 0.2 
 predictor = TimeSeriesClassifier(seed=0)
 df = predictor.load_data()
 
 start_time = time.time()
-df_output = predictor.run_prediction(df, lookahead_time, train_size)
+df_output = predictor.run_prediction(df, lookahead_time, lookbacks_time, train_size)
 end_time = time.time()
 print("Total run time {:.3f} hours.".format((end_time - start_time) / 3600.))
