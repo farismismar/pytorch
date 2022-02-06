@@ -14,6 +14,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.compat.v1 import set_random_seed
 
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
+from imblearn.over_sampling import RandomOverSampler
 
 import glob
 import tensorflow as tf
@@ -25,8 +26,8 @@ import pdb
 
 
 class TimeSeriesClassifier:    
-    ver = '0.1'
-    rel_date = '2020-03-03'
+    ver = '0.5'
+    rel_date = '2022-02-06'
     
     
     def __init__(self, prefer_gpu=True, seed=None):
@@ -70,11 +71,24 @@ class TimeSeriesClassifier:
         return df
     
 
-    def train_test_split_time(self, df, label, time_steps, train_size):
-        
-        y = df[label]
+    def train_test_split_time(self, df, label, time_steps, train_size, rebalance=True):
+        # Avoid truncating training data or test data...
+        # time_steps is 12 if you want to predict from data representing months in a year
+        # time_steps is 7 if you want to predict from data representing days of a week
+        # time_steps is 1 if you want to predict from data representing samples
+        y = df[label] # must be categorical
         X = df.drop(label, axis=1)
         
+        # Balance through ROS (SMOTE did not work due to n_neigh > n_samples)
+        if rebalance:
+            try:
+                print('Oversampling to balance classes...')
+                ros = RandomOverSampler(random_state=self.seed)
+                X, y = ros.fit_resample(X, y)
+            except Exception as e:
+                print(f'WARNING: Oversampling failed due to {e}.  No rebalancing performed.')
+                pass
+            
         # Split on border of time
         m = int(X.shape[0] / time_steps * train_size)
         train_rows = int(m * time_steps)
@@ -83,7 +97,7 @@ class TimeSeriesClassifier:
         X_train = X.iloc[:train_rows, :]
         X_test = X.iloc[train_rows:(train_rows+test_offset), :]
         
-        le = LabelEncoder()
+        le = preprocessing.LabelEncoder()
         le.fit(y)
         encoded_y = le.transform(y)
         dummy_Y = keras.utils.to_categorical(encoded_y)
@@ -91,56 +105,50 @@ class TimeSeriesClassifier:
         Y_train = dummy_Y[:train_rows]
         Y_test = dummy_Y[train_rows:(train_rows+test_offset)]
 
-        return X_train, X_test, Y_train, Y_test, le
+        return X_train, X_test, Y_train, Y_test, le, X_test.index
     
 
-    def _create_lstm_nn(self, input_shape, output_shape):
-        
+   def _create_lstm_nn(self, input_shape, output_shape, depth=8, width=16):
         mX, nX = input_shape
         _, nY = output_shape # this becomes the dummy coded number of beams
         
         model = keras.Sequential()
-        model.add(layers.LSTM(input_shape=(mX, nX), units=nX, 
-                              recurrent_dropout=0.8,
-                              #dropout=0.1, # dropout does not work
-                              time_major=False,
-                              return_sequences=False,
-                              activation='sigmoid'))
+        model.add(layers.LSTM(input_shape=(mX, nX), recurrent_dropout=0.2,
+                              units=width, return_sequences=True, 
+                              activation="tanh",
+                              recurrent_activation="sigmoid"))
 
-        model.add(layers.Dense(nY, activation='softmax'))
+        for hidden in np.arange(depth):
+            model.add(layers.Dense(width, activation='relu'))
         
-        optimizer = optimizers.Adam(lr=0.005)
-        model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+        model.add(layers.Dropout(0.1))
+        model.add(layers.LSTM(units=width, recurrent_dropout=0.5, return_sequences=False, 
+                              activation="tanh", recurrent_activation="sigmoid"))
+        model.add(layers.Dense(nY, activation='softmax'))
+        model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
         
         # Reporting the number of parameters
-        print(model.summary())        
-
+        print(model.summary())
+    
         num_params = model.count_params()
         print('Number of parameters: {}'.format(num_params))
         
         return model
 
-
-    def train_nn(self, X_train, X_test, Y_train, Y_test, lookahead=1, epoch_count=32, batch_size=64, scaling=True, verbose=True):
+    
+    def train_nn(self, X_train, X_test, Y_train, Y_test, lookbacks, epoch_count, batch_size, callback=None, verbose=True):
         # Store number of learning features
         mX, nX = X_train.shape
         _, nY = Y_train.shape
         
-        if scaling:
-            # Scale X features
-            sc = MinMaxScaler()
-            X_train = sc.fit_transform(X_train)
-            X_test = sc.transform(X_test)
-        else:
-            # Convert input to numpy array (if not scaling)
-            X_train = X_train.values
-            X_test = X_test.values
+        # Scale X features
+        sc = MinMaxScaler()
+        X_train = sc.fit_transform(X_train)
+        X_test = sc.transform(X_test)
 
-        # Now, reshape input to be 3-D: [batch, timesteps, feature]
-        # https://keras.io/api/layers/recurrent_layers/lstm/        
-        # Because LSTM time_major is True, input shape becomes [timesteps, batch, feature]:
-        X_train = np.reshape(X_train, (-1, lookahead + 1, X_train.shape[1] // (lookahead + 1)))
-        X_test = np.reshape(X_test, (-1, lookahead + 1, X_test.shape[1] // (lookahead + 1)))
+        # Now, reshape input to be 3-D: [timesteps, batch, feature]
+        X_train = np.reshape(X_train, (-1, lookbacks + 1, X_train.shape[1] // (lookbacks + 1)))
+        X_test = np.reshape(X_test, (-1, lookbacks + 1, X_test.shape[1] // (lookbacks + 1)))
     
         Y_train = np.reshape(Y_train, (-1, nY))
         Y_test = np.reshape(Y_test, (-1, nY))
@@ -149,35 +157,47 @@ class TimeSeriesClassifier:
         
         model = self._create_lstm_nn(input_shape=(X_train.shape[1], X_train.shape[2]),
                                       output_shape=(X_train.shape[1], nY))
-                                      
+        
+        #patience = 2 * lookbacks
+        callback_list = [] # EarlyStopping(monitor='val_loss', min_delta=0, patience=patience)]
+        
+        if callback is not None:
+            callback_list = callback_list + [callback]
+            
         history = model.fit(X_train, Y_train, epochs=epoch_count, batch_size=batch_size, 
-                            callbacks=[EarlyStopping(monitor='val_loss', min_delta=0, patience=lookahead*4)],
-                            validation_split=0.5,
+                            callbacks=callback_list,
+                            validation_data=(X_test, Y_test), 
+                            #validation_split=0.5,
                             verbose=verbose, shuffle=True)
         
         Y_pred_test = model.predict(X_test, batch_size=batch_size) 
             
         return history, model, Y_pred_test
-    
-    
-    def engineer_features(self, df, target_variable, lookahead=2, lookbacks=3, dropna=False):
-        # use this to build the time lookahead
+      
+        
+    def engineer_features(self, df, target_variable, lookahead, lookbacks, dropna=False):
         df_ = df.set_index('Time')
         df_y = df_[target_variable].to_frame()
-      
+        
+        # This is needed in case the idea is to predict y(t), otherwise
+        # the data will contain y_t in the data and y_t+0, which are the same
+        # and predictions will be trivial.
+        if lookahead == 0:
+            df_ = df_.drop(target_variable, axis=1)
+        
         df_postamble = df_.add_suffix('_t')
         df_postamble = pd.concat([df_postamble, pd.DataFrame(np.zeros_like(df_), index=df_.index, columns=df_.columns).add_suffix('_d')], axis=1)
-                
+        
         df_shifted = pd.DataFrame()
         # Noting that column order is important
         for i in range(lookbacks, 0, -1):
-            df_shifted_i = df_.shift(i).add_suffix('_t-{}'.format(i))
-            df_diff_i = df_.diff(i).add_suffix('_d-{}'.format(i)) # difference with previous time
+            df_shifted_i = df_.shift(i).add_suffix('_t-{}'.format(i*10))
+            df_diff_i = df_.diff(i).add_suffix('_d-{}'.format(i*10)) # difference with previous time
             
             df_shifted = pd.concat([df_shifted, df_shifted_i, df_diff_i], axis=1)
+           # df_shifted = pd.concat([df_shifted, df_shifted_i], axis=1)
     
-        df_y_shifted = df_y.shift(-lookahead).add_suffix('_t+{}'.format(lookahead))
-
+        df_y_shifted = df_y.shift(-lookahead).add_suffix('_t+{}'.format(lookahead*10))
         df_output = pd.concat([df_shifted, df_postamble, df_y_shifted], axis=1)
         
         if dropna:
@@ -237,11 +257,12 @@ class TimeSeriesClassifier:
         label = 'target_variable'
         df_1, engineered_label = self.engineer_features(df, label, lookahead=lookahead_time, lookbacks=lookbacks_time)
         
-        X_train, X_test, Y_train, Y_test, le = self.train_test_split_time(df_1, engineered_label, time_steps=lookahead_time, train_size=train_size)
+        X_train, X_test, Y_train, Y_test, le, _ = self.train_test_split_time(df_1, 
+                                            engineered_label, time_steps=1, train_size=train_size, rebalance=True)
         
         history, model, Y_pred_nn = self.train_nn(X_train, X_test, Y_train, Y_test, 
-                                            lookahead=lookahead_time,
-                                            epoch_count=epoch_count, batch_size=batch_size)
+                                                            lookbacks=lookbacks_time, callback=None,
+                                                            epoch_count=epoch_count, batch_size=batch_size)
         
         predictor.plot_history(history, title='History')
         end_time = time.time()
