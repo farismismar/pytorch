@@ -35,12 +35,12 @@ import matplotlib.pyplot as plt
 import time
 
 prefer_gpu = True
-n_epochs = 20
+n_epochs = 10
 batch_size = 32
 
-# Dimensions of X
-mX = 1000
-nX = 20
+# Dimensions of X of our binary classifier
+mX = 500
+nX = 10
 
 seed = 0
 
@@ -77,12 +77,13 @@ def create_mlp(width, depth, input_dim):
 X, y = make_classification(n_samples=mX, n_features=nX, random_state=np_random)
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=np_random)
 
+# This shows that the runtime is const in width
 t_w = []
-W = [20, 40, 60, 80]
+W = [5, 10, 15, 20, 25, 30]
 for w in W:
     model = KerasClassifier(build_fn=create_mlp, input_dim=nX, width=w, depth=10, epochs=n_epochs, batch_size=batch_size, verbose=0)
 
-    for iterations in range(10):
+    for iteration in range(40):
         start_time = time.time()
         with tf.device(device):
             model.fit(X_train, y_train)
@@ -93,13 +94,14 @@ for w in W:
     
     t_w.append(run_time)
     
-    
+
+# This shows that the runtime is linear in the depth.
 t_d = []
-D = [5, 10, 15, 20]
+D = [5, 10, 15, 20, 25, 30]
 for d in D:
     model = KerasClassifier(build_fn=create_mlp, input_dim=nX, width=5, depth=d, epochs=n_epochs, batch_size=batch_size, verbose=0)
 
-    for iterations in range(10):
+    for iteration in range(20):
         start_time = time.time()
         with tf.device(device):
             model.fit(X_train, y_train)
@@ -111,23 +113,54 @@ for d in D:
     t_d.append(run_time)
     
 
+# Test interaction
+x = W
+y = D
 
-# Plot the data closing
+xx, yy = np.meshgrid(x, y)
+
+zz = []
+for w in xx[0,:]:
+    for d in yy[:,0]:
+        model = KerasClassifier(build_fn=create_mlp, input_dim=nX, width=w, depth=d, epochs=n_epochs, batch_size=batch_size, verbose=0)
+
+        for iteration in range(20):
+            print(f'Iter: {iteration} for width {w} and depth {d}.')
+            start_time = time.time()
+            with tf.device(device):
+                model.fit(X_train, y_train)
+                y_pred = model.predict(X_test)
+            end_time = time.time()
+        
+        run_time = (end_time - start_time)
+        
+        zz.append(run_time)
+
+zz = np.reshape(zz, xx.shape)
+
+
+# Generate plots
+fig = plt.contourf(x, y, zz)
+plt.axis('scaled')
+plt.colorbar()
+plt.show()
+
+ax = plt.figure().add_subplot(projection='3d')
+ax.plot_surface(x, y, zz, cmap='autumn',antialiased=True)# cstride=1, rstride=1)
+plt.show()
+
+
 fig = plt.figure(figsize=(8,5))
-plt.plot(W, t_w)
-plt.xlabel('Width')
+ax = fig.gca()
+plot1, = ax.plot(W, t_w, label='Width')
+plot2, = ax.plot(D, t_d, label='Depth')
+ax.legend(handles=[plot1, plot2])
+plt.xlabel('Parameter')
 plt.ylabel('Run time')
 plt.grid()
 plt.tight_layout()
 plt.show()
 plt.close(fig)
 
-fig = plt.figure(figsize=(8,5))
-plt.plot(D, t_d)
-plt.xlabel('Depth')
-plt.ylabel('Run time')
-plt.grid()
-plt.tight_layout()
-plt.show()
-plt.close(fig)
+
 
