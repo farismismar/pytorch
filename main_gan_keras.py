@@ -49,8 +49,6 @@ set_random_seed(seed)
 # This method returns a helper function to compute cross entropy loss
 cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
-# https://github.com/tensorflow/docs/blob/master/site/en/tutorials/generative/dcgan.ipynb
-
 # Create the discriminator.
 def make_discriminator_model():
     global latent_dim
@@ -60,9 +58,20 @@ def make_discriminator_model():
     model.add(layers.LeakyReLU())
     model.add(layers.Dropout(0.2))
     
+    model.add(layers.Dense(units=64))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+    model.add(layers.Dropout(0.2))
+    
+    model.add(layers.Dense(units=32))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+    model.add(layers.Dropout(0.2))
+    
     model.add(layers.Dense(units=16))
     model.add(layers.BatchNormalization())
     model.add(layers.LeakyReLU())
+    model.add(layers.Dropout(0.2))
     
     model.add(layers.Dense(2, activation='softmax')) # do not change
 
@@ -85,7 +94,6 @@ def make_generator_model():
     model.add(layers.BatchNormalization())
     model.add(layers.LeakyReLU())
     
-    model.add(layers.Dropout(0.2))
     model.add(layers.Dense(units=latent_dim))
 
     return model
@@ -133,6 +141,9 @@ def train_step(images):
 
 
 def train(dataset, epochs, generative_samples):
+    G_losses = []
+    D_losses = []
+    
     for epoch in range(epochs):
         start = time.time()
         
@@ -143,9 +154,13 @@ def train(dataset, epochs, generative_samples):
             g_loss, d_loss = train_step(image_batch)
             if n == data_size - 1:
                 print(f'G loss: {g_loss:.6f}.  D loss: {d_loss:.6f}')
-        
+                G_losses.append(g_loss)
+                D_losses.append(d_loss)
+                
         end = time.time()
         print ('Time for epoch {} is {:.2f} sec'.format(epoch + 1, end-start))
+
+    return G_losses, D_losses
 
         
 def generate(model, samples):
@@ -183,7 +198,18 @@ train_dataset = tf.data.Dataset.from_tensor_slices(train_set).batch(batch_size).
 
 # The noise required for the generative model 
 latent_space_samples = tf.random.normal([num_samples_to_generate, latent_dim])
-train(train_dataset, epochs, latent_space_samples)
+G_losses, D_losses = train(train_dataset, epochs, latent_space_samples)
+
+fig, ax = plt.subplots(figsize=(8, 5))
+plt.plot(range(epochs), G_losses, label='Generator loss')
+plt.plot(range(epochs), D_losses, label='Discriminator loss')
+plt.legend()
+plt.grid()
+plt.xlabel('Epoch')
+plt.ylabel('Binary cross-entropy loss')
+plt.tight_layout()
+plt.show()
+plt.close(fig)
 
 generated_samples = generate(generator, latent_space_samples)
 
