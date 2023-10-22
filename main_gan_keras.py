@@ -73,7 +73,7 @@ def make_discriminator_model():
     model.add(layers.LeakyReLU())
     model.add(layers.Dropout(0.2))
     
-    model.add(layers.Dense(2, activation='softmax')) # do not change
+    model.add(layers.Dense(1))
 
     return model
 
