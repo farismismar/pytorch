@@ -9,7 +9,7 @@ import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 
 if os.name == 'nt':
-    os.add_dll_directory("/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.5/bin")
+    os.add_dll_directory("/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.6/bin")
 
 import tensorflow as tf
 print(tf.config.list_physical_devices('GPU'))
