@@ -47,7 +47,7 @@ set_random_seed(seed)
 # tf.random.set_seed(seed)
 
 # This method returns a helper function to compute cross entropy loss
-cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=False)
 
 # Create the discriminator.
 def make_discriminator_model():
@@ -73,7 +73,7 @@ def make_discriminator_model():
     model.add(layers.LeakyReLU())
     model.add(layers.Dropout(0.2))
     
-    model.add(layers.Dense(1))
+    model.add(layers.Dense(1, activation='sigmoid')) # do not change
 
     return model
 
@@ -180,6 +180,8 @@ generated_image = generator(z, training=False)
 
 discriminator = make_discriminator_model()
 # decision = discriminator(generated_image)
+
+# print(decision.numpy())
 
 # Train the model: training data has a dimension of 2 
 # Hence the latent dimension is 2.
