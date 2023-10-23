@@ -19,38 +19,30 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import random
 import numpy as np
-from tensorflow.compat.v1 import set_random_seed
-
-from tensorflow.keras import layers
+from tensorflow.keras import layers, losses, optimizers
 
 import matplotlib.pyplot as plt
-
 import time
 
 plt.rcParams['font.family'] = "Arial"
 plt.rcParams['font.size'] = "14"
 
+seed = 7
 batch_size = 32
-epochs = 400
+epochs = 600
 lr = 1e-3
 
+num_samples_to_generate = 64
 latent_dim = 2
 
-num_samples_to_generate = 64
-seed = 7
-
-# Not working well to ensure reproducibility.
+# Reproducibility not working well.
 os.environ['PYTHONHASHSEED'] = str(seed)
 random.seed(seed)
 random_state = np.random.RandomState(seed)
-set_random_seed(seed)
-# tf.random.set_seed(seed)
+tf.random.set_seed(seed)
 
-# This method returns a helper function to compute cross entropy loss
-cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=False)
 
-# Create the discriminator.
-def make_discriminator_model():
+def create_discriminator_model():
     global latent_dim
     model = tf.keras.Sequential(name='discriminator')
     model.add(layers.Dense(units=128, input_dim=latent_dim))
@@ -78,8 +70,7 @@ def make_discriminator_model():
     return model
 
 
-# Create the generator.
-def make_generator_model():
+def create_generator_model():
     global latent_dim
     model = tf.keras.Sequential(name='generator')
     model.add(layers.Dense(units=16))
@@ -87,10 +78,6 @@ def make_generator_model():
     model.add(layers.LeakyReLU())
     
     model.add(layers.Dense(units=16))
-    model.add(layers.BatchNormalization())
-    model.add(layers.LeakyReLU())
-    
-    model.add(layers.Dense(units=8))
     model.add(layers.BatchNormalization())
     model.add(layers.LeakyReLU())
     
@@ -112,9 +99,8 @@ def generator_loss(fake_output):
     return cross_entropy(tf.ones_like(fake_output), fake_output)
      
 
-# Notice the use of `tf.function`
-# This annotation causes the function to be "compiled" for much
-# faster execution
+# The use of `tf.function` causes the function to be compiled
+# for a much faster execution
 @tf.function
 def train_step(images):
     global batch_size, latent_dim
@@ -146,19 +132,24 @@ def train(dataset, epochs, generative_samples):
     
     for epoch in range(epochs):
         start = time.time()
+        g_loss_epoch = []
+        d_loss_epoch = []
         
         data_size = len(train_dataset)
-        
-        for n, batch in dataset.enumerate():
-            image_batch, _ = batch[:, :-1], batch[:, -1]
+        for n, image_batch in dataset.enumerate():
             g_loss, d_loss = train_step(image_batch)
+            g_loss_epoch.append(g_loss)
+            d_loss_epoch.append(d_loss)
             if n == data_size - 1:
-                print(f'G loss: {g_loss:.6f}.  D loss: {d_loss:.6f}')
-                G_losses.append(g_loss)
-                D_losses.append(d_loss)
+                g_loss_average = np.mean(g_loss_epoch)
+                d_loss_average = np.mean(d_loss_epoch)
+                G_losses.append(g_loss_average)
+                D_losses.append(d_loss_average)
+                print('G loss: {0:.6f}.  D loss: {1:.6f}'.\
+                      format(g_loss_average, d_loss_average))
                 
         end = time.time()
-        print ('Time for epoch {} is {:.2f} sec'.format(epoch + 1, end-start))
+        print ('Time for epoch {} is {:.2f} sec'.format(epoch + 1, end - start))
 
     return G_losses, D_losses
 
@@ -170,17 +161,22 @@ def generate(model, samples):
     
     return predictions
   
-    
-generator_optimizer = tf.keras.optimizers.Adam(lr)
-discriminator_optimizer = tf.keras.optimizers.Adam(lr)
+  
+# This method returns a helper function to compute cross entropy loss
+cross_entropy = losses.BinaryCrossentropy(from_logits=False)
 
-generator = make_generator_model()
+generator_optimizer = optimizers.Adam(lr)
+discriminator_optimizer = optimizers.Adam(lr)
+
+generator = create_generator_model()
+generator.compile(optimizer=generator_optimizer, loss=cross_entropy, metrics=[cross_entropy])
+
 z = tf.random.normal([batch_size, latent_dim]) # the noise to train generator
 generated_image = generator(z, training=False)
 
-discriminator = make_discriminator_model()
+discriminator = create_discriminator_model()
+discriminator.compile(optimizer=discriminator_optimizer, loss=cross_entropy, metrics=[cross_entropy])
 # decision = discriminator(generated_image)
-
 # print(decision.numpy())
 
 # Train the model: training data has a dimension of 2 
@@ -188,15 +184,12 @@ discriminator = make_discriminator_model()
 train_data_length = 512
 
 train_data = np.zeros((train_data_length, 2))
-train_data[:, 0] = 2 * np.pi * random_state.uniform(low=0, high=1, size=train_data_length)
-train_data[:, 1] = np.sin(train_data[:, 0])
-train_labels = np.zeros(train_data_length)
-
+train_data[:, 0] = random_state.uniform(low=0, high=1, size=train_data_length)
+train_data[:, 1] = np.sin(2 * np.pi * train_data[:, 0])
 train_set = np.array(train_data)
-train_set = np.c_[train_set, train_labels]
 
 assert(latent_dim == train_data.shape[1])
-train_dataset = tf.data.Dataset.from_tensor_slices(train_set).batch(batch_size).shuffle(train_data_length, seed=seed)
+train_dataset = tf.data.Dataset.from_tensor_slices(train_data).batch(batch_size).shuffle(train_data_length, seed=seed)
 
 # The noise required for the generative model 
 latent_space_samples = tf.random.normal([num_samples_to_generate, latent_dim])
