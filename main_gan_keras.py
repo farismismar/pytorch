@@ -73,7 +73,7 @@ def create_discriminator_model():
 def create_generator_model():
     global latent_dim
     model = tf.keras.Sequential(name='generator')
-    model.add(layers.Dense(units=16))
+    model.add(layers.Dense(units=32, use_bias=False))
     model.add(layers.BatchNormalization())
     model.add(layers.LeakyReLU())
     
