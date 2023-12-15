@@ -30,7 +30,16 @@ hidden_1_dim = 32
 hidden_2_dim = 32
 output_dim = 10
 
-os.chdir('/Users/farismismar/Desktop')
+# For Windows: path to NVIDIA's cudnn libraries.
+if os.name == 'nt':
+    os.add_dll_directory("/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.6/bin")
+
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
+
+# The GPU id to use, usually either "0" or "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"   # My NVIDIA GeForce RTX 3050 Ti GPU output from line 42
+
+#print(tf.config.list_physical_devices('GPU'))
 
 use_cuda = len(tf.config.list_physical_devices('GPU')) > 0 and prefer_gpu
 device = "/gpu:0" if use_cuda else "/cpu:0"
@@ -42,7 +51,7 @@ np.random.seed(seed)
 
 # Load MNIST as Numpy arrays
 (X_train, y_train), (X_test, y_test) = keras.datasets.mnist.load_data()
-# Note: If this fails due to certificate verify failure, sudo -H pip3 install --upgrade certifi
+# Note: If this fails due to certificate verify failure, pip3 install --upgrade certifi
 
 # Must normalize the data for Keras in [0,1]---not required for PyTorch
 X_train = X_train.astype("float32") / 255.
@@ -114,9 +123,6 @@ with tf.device(device):
     loss, acc, _ = model.model.evaluate(X_test, y_test)
     
 print('Test: Loss {:.4f}, Acc: {:.4f}'.format(loss, acc))
-
-# Scoring
-accuracy = (y_test == y_pred).sum() / y_test.shape[0]
 
 # Reporting the number of parameters
 num_params = model.model.count_params()
