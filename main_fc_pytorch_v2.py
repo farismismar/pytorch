@@ -132,7 +132,7 @@ for epoch in np.arange(epoch_count):
     history['training_loss'].append(epoch_loss / len(train_loader.dataset))
     history['training_f1'].append(train_f1_perf_i)
     history['cv_f1'].append(cv_f1_perf_i)
-
+    y_proba = y_proba.cpu().numpy()
 end_time = time.time()
 
 print('Training time: {:.2f} mins.'.format((end_time - start_time) / 60.))
